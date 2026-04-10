@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/Overdraw.sln",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build-app",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/Overdraw.App/Overdraw.App.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "run-overlay-spike",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/src/Overdraw.App/Overdraw.App.csproj",
+        "--",
+        "--overlay-spike"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "run-overlay-spike-monitor-1",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/src/Overdraw.App/Overdraw.App.csproj",
+        "--",
+        "--overlay-spike",
+        "--monitor",
+        "1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "list-monitors",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/src/Overdraw.App/Overdraw.App.csproj",
+        "--",
+        "--list-monitors"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

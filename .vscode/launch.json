@@ -1,0 +1,51 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Overdraw: Overlay Spike",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-app",
+      "program": "${workspaceFolder}/src/Overdraw.App/bin/Debug/net8.0-windows/Overdraw.App.dll",
+      "args": [
+        "--overlay-spike"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Overdraw: Overlay Spike Monitor 1",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-app",
+      "program": "${workspaceFolder}/src/Overdraw.App/bin/Debug/net8.0-windows/Overdraw.App.dll",
+      "args": [
+        "--overlay-spike",
+        "--monitor",
+        "1"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Overdraw: List Monitors",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-app",
+      "program": "${workspaceFolder}/src/Overdraw.App/bin/Debug/net8.0-windows/Overdraw.App.dll",
+      "args": [
+        "--list-monitors"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Overdraw: Attach",
+      "type": "coreclr",
+      "request": "attach"
+    }
+  ]
+}

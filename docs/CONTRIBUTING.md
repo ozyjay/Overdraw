@@ -11,7 +11,7 @@ This project starts as a Windows-first prototype for a difficult desktop interac
 - Update the docs when architecture decisions or scope assumptions change.
 
 ## Code Style
-- Use Python type hints for new modules.
+- Use nullable-aware C# for new modules.
 - Prefer clear module boundaries over deep inheritance or premature abstractions.
 - Keep dependencies minimal and justify additions in the relevant task or architecture notes.
 - Add comments only for non-obvious behavior, especially around Windows APIs and hardware quirks.
@@ -20,7 +20,7 @@ This project starts as a Windows-first prototype for a difficult desktop interac
 - Start risky work with a small feasibility spike when the behavior is uncertain.
 - Record important findings in `docs/ARCHITECTURE.md` or `docs/TASKS.md`.
 - Keep changes aligned with the structure and guardrails in `AGENTS.md`.
-- When adding runtime code later, include at least basic verification notes for how it was tested.
+- Include at least basic verification notes for how runtime changes were tested, especially when they affect overlay hit testing, focus behavior, monitor targeting, or pen input.
 
 ## Testing
 - Add automated tests for logic that does not require the live Windows overlay or attached pen hardware.

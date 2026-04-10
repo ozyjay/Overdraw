@@ -1,20 +1,23 @@
 # Tasks
 
 ## Milestone 0: Repository Bootstrap
-- Create Python project metadata and initial package layout.
-- Add baseline tooling for formatting, linting, and test execution.
+- Create .NET solution and initial Windows application project layout.
+- Add baseline tooling for build, formatting, and test execution.
 - Add a minimal application entrypoint and placeholder module structure.
 - Capture architecture decisions as they become concrete.
 
 ## Milestone 1: Windows Overlay Feasibility Spike
-- Evaluate Python-compatible windowing options for a transparent always-on-top overlay.
+- Evaluate the native WinForms plus Win32 path for a transparent always-on-top overlay.
 - Prove click-through behavior for ordinary mouse interaction.
+- Prove that mouse wheel input also reaches the active underlying window.
 - Prove that keyboard input continues to reach the active underlying window.
 - Record any limitations around focus, z-order, or display configuration.
+- Refactor the current single-file spike after the overlay behavior is trustworthy.
 
 ## Milestone 2: Pen Input Feasibility Spike
 - Identify the best Windows input path for XP-Pen pen events.
 - Determine whether pen proximity is directly available or whether a practical equivalent signal is needed.
+- Verify whether Windows reports XP-Pen interaction as `pen`, `mouse`, or another pointer type in the diagnostics spike.
 - Normalize pen-down, pen-move, and pen-up events behind a platform adapter.
 - Document hardware and driver assumptions discovered during testing.
 
@@ -45,3 +48,4 @@
 - The overlay interaction contract is the highest-priority risk.
 - Pen detection reliability is the second highest-priority risk.
 - UI polish and extra drawing features come after the interaction model is proven.
+- Code organization can stay minimal until click-through and pen input are both validated on the XP-Pen setup.

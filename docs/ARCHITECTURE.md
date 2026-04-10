@@ -1,7 +1,7 @@
 # Architecture
 
 ## Overview
-Overdraw should be structured as a Windows-first Python application with a narrow platform integration layer and a platform-agnostic drawing core. The dominant architectural requirement is input routing: the application must render above the desktop while preserving normal interaction with whatever window sits underneath.
+Overdraw should be structured as a Windows-first C# application with a narrow Win32 integration layer and a platform-agnostic drawing core. The dominant architectural requirement is input routing: the application must render above the desktop while preserving normal interaction with whatever window sits underneath.
 
 ## Proposed System Shape
 - Application orchestration:
@@ -12,6 +12,11 @@ Overdraw should be structured as a Windows-first Python application with a narro
   stores stroke state, converts pen events into renderable paths, and exposes redraw-friendly data for the overlay.
 - Overlay renderer:
   paints the current drawing state onto the transparent full-screen surface with minimal latency.
+
+## Current Implementation Snapshot
+- The repository currently has a single WinForms application project under `src/Overdraw.App/`.
+- The current spike keeps CLI parsing, monitor selection, overlay form logic, and Win32 interop in one file to reduce friction while validating behavior.
+- If the WinForms plus Win32 path proves viable, the next refactor should split the code into application, platform, and rendering namespaces rather than expanding the single-file spike.
 
 ## Runtime Flow
 1. Start the application and create the overlay window.
@@ -31,13 +36,13 @@ Overdraw should be structured as a Windows-first Python application with a narro
   early design should assume the app may eventually need to cover the full virtual desktop, even if the first proof of concept starts on the primary display.
 
 ## Module Boundaries
-- `src/overdraw/app/`:
+- `src/Overdraw.App/`:
   lifecycle, configuration loading, and mode coordination.
-- `src/overdraw/platform/windows/`:
+- `src/Overdraw.App/Platform/Windows/`:
   Windows adapter, overlay window management, and device-event handling.
-- `src/overdraw/drawing/`:
+- `src/Overdraw.App/Drawing/`:
   stroke model, pen-event normalization, and render state.
-- `src/overdraw/rendering/`:
+- `src/Overdraw.App/Rendering/`:
   drawing primitives and frame update integration with the selected GUI/rendering stack.
 
 These paths are intentional placeholders, not locked implementation names.
@@ -48,10 +53,11 @@ These paths are intentional placeholders, not locked implementation names.
 - Application orchestration should decide when drawing is enabled and how subsystems are composed.
 
 ## Early Technical Spikes
-- Verify at least one Python-compatible windowing approach can provide:
+- Verify that the WinForms plus Win32 overlay path can provide:
   visible transparent overlay, always-on-top placement, and non-blocking mouse behavior.
 - Verify a reliable path for XP-Pen pen detection and proximity or equivalent draw gating.
 - Measure rendering latency and redraw behavior with continuous strokes.
+- Verify that monitor selection, DPI scaling, and multi-monitor coordinates remain correct once the overlay moves beyond the current proof of concept.
 
 ## Architecture Constraints
 - Do not bake XP-Pen driver assumptions directly into the stroke engine.

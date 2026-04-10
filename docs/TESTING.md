@@ -14,7 +14,8 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 ## Critical Manual Scenarios
 - Launch Overdraw while another application is focused and confirm the active app remains usable.
 - Verify the overlay is visible and remains on top of normal windows.
-- Click, drag, and type into the underlying application with mouse and keyboard and confirm input is not blocked.
+- Click, drag, scroll, and type into the underlying application with mouse and keyboard and confirm input is not blocked.
+- Use `Ctrl+Shift+F12` and confirm the overlay closes without first taking focus.
 - Bring the XP-Pen pen into range and verify Overdraw becomes draw-ready without disturbing normal app focus.
 - Draw visible strokes with the pen and confirm stroke updates remain responsive.
 - Move the mouse without the pen and confirm no accidental strokes are created.
@@ -33,9 +34,10 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 - Keep Windows API behavior behind interfaces so non-UI logic can be tested without the live overlay.
 - Use small fixtures for stroke data and normalized pen events.
 - Treat hardware validation scripts and checklists as first-class test assets.
+- For the current C# spike, add a test project only once CLI parsing, monitor selection, and non-UI decisions are split from the WinForms entrypoint.
 
 ## Exit Criteria For Early Prototype
 - Full-screen overlay can be demonstrated on Windows.
-- Standard mouse and keyboard interaction still works in the underlying app.
+- Standard mouse clicks, mouse wheel input, and keyboard interaction still work in the underlying app.
 - Pen-driven drawing is functional on the target XP-Pen setup.
 - Known limitations are written down with reproduction notes where possible.

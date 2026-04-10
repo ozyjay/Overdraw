@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Mission
-Build `overdraw`, a Windows-first Python desktop tool that draws a low-latency visual overlay across the entire screen while preserving normal interaction with underlying applications. The overlay must be effectively click-through for standard input, and drawing should activate only for pen-driven interaction from supported hardware such as an XP-Pen display.
+Build `overdraw`, a Windows-first C# desktop tool that draws a low-latency visual overlay across the entire screen while preserving normal interaction with underlying applications. The overlay must be effectively click-through for standard input, and drawing should activate only for pen-driven interaction from supported hardware such as an XP-Pen display.
 
 ## Product Intent
 - The user can keep using an IDE, browser, document editor, terminal, or other desktop app normally.
@@ -10,7 +10,7 @@ Build `overdraw`, a Windows-first Python desktop tool that draws a low-latency v
 - The initial target is a stable Windows proof of concept, not early cross-platform parity.
 
 ## Working Assumptions
-- Primary runtime: modern CPython on Windows.
+- Primary runtime: .NET 8 on Windows.
 - Primary hardware scenario: XP-Pen pen display connected to a Windows workstation.
 - Primary challenge: combining an always-on-top visual layer with input pass-through and pen-specific activation.
 - Early implementation may require focused Windows API integration and small technical spikes before settling the final app stack.
@@ -29,8 +29,8 @@ Build `overdraw`, a Windows-first Python desktop tool that draws a low-latency v
 - `docs/TASKS.md`: prioritized implementation backlog.
 - `docs/TESTING.md`: validation strategy and manual hardware checks.
 - `docs/CONTRIBUTING.md`: development workflow and expectations.
-- `src/overdraw/`: future application package.
-- `tests/`: future automated tests.
+- `src/Overdraw.App/`: application project.
+- `tests/`: future automated tests if a separate test project is introduced.
 
 ## Module Boundaries To Preserve
 - Platform adapter:
@@ -47,7 +47,7 @@ Build `overdraw`, a Windows-first Python desktop tool that draws a low-latency v
 - Keep public interfaces small until hardware behavior is observed on the target XP-Pen setup.
 
 ## Coding Expectations
-- Use Python type hints for new runtime code.
+- Use nullable-aware C# for new runtime code.
 - Prefer standard library plus narrowly justified dependencies.
 - Write code and docs in ASCII unless an existing file requires otherwise.
 - Add comments only where behavior is subtle, hardware-driven, or Windows-specific.
