@@ -34,7 +34,7 @@ internal static class Program
             return 0;
         }
 
-        if (!options.RunOverlaySpike && !options.RunPenSpike && !options.RunInkSpike)
+        if (!options.RunOverlaySpike && !options.RunPenSpike && !options.RunInkSpike && !options.RunPointerInkSpike)
         {
             PrintUsage();
             return 0;
@@ -58,7 +58,13 @@ internal static class Program
 
             if (options.RunInkSpike)
             {
-                var inkSpike = new PenInkOverlayWindow(monitor, options.Verbose);
+                var inkSpike = new PenInkOverlayWindow(monitor, options.Verbose, InkCaptureMode.PenMouseHook);
+                return inkSpike.Run();
+            }
+
+            if (options.RunPointerInkSpike)
+            {
+                var inkSpike = new PenInkOverlayWindow(monitor, options.Verbose, InkCaptureMode.PointerTarget);
                 return inkSpike.Run();
             }
 
@@ -74,125 +80,17 @@ internal static class Program
 
     private static void PrintUsage()
     {
-        Console.WriteLine("Usage: overdraw [--overlay-spike] [--pen-spike] [--ink-spike] [--list-monitors] [--monitor <selector>] [--verbose]");
+        Console.WriteLine("Usage: overdraw [--overlay-spike] [--pen-spike] [--ink-spike] [--pointer-ink-spike] [--list-monitors] [--monitor <selector>] [--verbose]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --overlay-spike    Run the Windows overlay feasibility prototype.");
         Console.WriteLine("  --pen-spike        Run the pen input diagnostics spike.");
         Console.WriteLine("  --ink-spike        Run the pen-only drawing overlay experiment.");
+        Console.WriteLine("  --pointer-ink-spike Run the native pointer-target ink experiment.");
         Console.WriteLine("  --list-monitors    List detected monitors and exit.");
         Console.WriteLine("  --monitor          Use 'primary', a zero-based index, or a device name.");
         Console.WriteLine("  --verbose          Print extra placement or pointer diagnostics.");
         Console.WriteLine("  --help             Show this message.");
-    }
-}
-
-internal sealed record CliOptions(
-    bool RunOverlaySpike,
-    bool RunPenSpike,
-    bool RunInkSpike,
-    bool ListMonitors,
-    bool ShowHelp,
-    bool Verbose,
-    string MonitorSelector,
-    bool IsValid,
-    string? ErrorMessage)
-{
-    public static CliOptions Parse(IEnumerable<string> args)
-    {
-        var runOverlaySpike = false;
-        var runPenSpike = false;
-        var runInkSpike = false;
-        var listMonitors = false;
-        var showHelp = false;
-        var verbose = false;
-        var monitorSelector = "primary";
-
-        using var enumerator = args.GetEnumerator();
-        while (enumerator.MoveNext())
-        {
-            var arg = enumerator.Current;
-            switch (arg)
-            {
-                case "--overlay-spike":
-                    runOverlaySpike = true;
-                    break;
-                case "--pen-spike":
-                    runPenSpike = true;
-                    break;
-                case "--ink-spike":
-                    runInkSpike = true;
-                    break;
-                case "--list-monitors":
-                    listMonitors = true;
-                    break;
-                case "--verbose":
-                    verbose = true;
-                    break;
-                case "--help":
-                case "-h":
-                    showHelp = true;
-                    break;
-                case "--monitor":
-                    if (!enumerator.MoveNext())
-                    {
-                        return new CliOptions(false, false, false, false, false, false, "primary", false, "Missing value for --monitor.");
-                    }
-
-                    monitorSelector = enumerator.Current;
-                    break;
-                default:
-                    return new CliOptions(false, false, false, false, false, false, "primary", false, $"Unknown argument: {arg}");
-            }
-        }
-
-        return new CliOptions(runOverlaySpike, runPenSpike, runInkSpike, listMonitors, showHelp, verbose, monitorSelector, true, null);
-    }
-}
-
-internal sealed record MonitorInfo(
-    int Index,
-    string DeviceName,
-    string FriendlyName,
-    Rectangle Bounds,
-    bool IsPrimary)
-{
-    public string ToDisplayString()
-    {
-        var primarySuffix = IsPrimary ? " primary" : string.Empty;
-        return $"[{Index}] {DeviceName} ({FriendlyName}) {Bounds.Width}x{Bounds.Height} at ({Bounds.Left}, {Bounds.Top}){primarySuffix}";
-    }
-}
-
-internal static class MonitorCatalog
-{
-    public static IReadOnlyList<MonitorInfo> Enumerate()
-    {
-        return NativeMethods.EnumerateMonitors()
-            .Select((monitor, index) => monitor with { Index = index })
-            .ToArray();
-    }
-
-    public static MonitorInfo Select(IReadOnlyList<MonitorInfo> monitors, string selector)
-    {
-        var normalized = selector.Trim();
-        if (string.IsNullOrWhiteSpace(normalized) || normalized.Equals("primary", StringComparison.OrdinalIgnoreCase))
-        {
-            return monitors.FirstOrDefault(monitor => monitor.IsPrimary) ?? monitors[0];
-        }
-
-        if (int.TryParse(normalized, out var index))
-        {
-            var byIndex = monitors.FirstOrDefault(monitor => monitor.Index == index);
-            return byIndex ?? throw new ArgumentException($"No monitor found at index {index}.");
-        }
-
-        var byName = monitors.FirstOrDefault(
-            monitor =>
-                monitor.DeviceName.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
-                monitor.FriendlyName.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
-                monitor.FriendlyName.Contains(normalized, StringComparison.OrdinalIgnoreCase));
-        return byName ?? throw new ArgumentException($"No monitor found for selector '{selector}'.");
     }
 }
 
@@ -722,6 +620,12 @@ internal sealed class PenDiagnosticsWindow
     }
 }
 
+internal enum InkCaptureMode
+{
+    PenMouseHook,
+    PointerTarget
+}
+
 internal sealed class PenInkOverlayWindow
 {
     private const string WindowClassName = "OverdrawPenInkOverlayWindow";
@@ -743,30 +647,30 @@ internal sealed class PenInkOverlayWindow
     private const int WmDestroy = 0x0002;
     private const int WmPaint = 0x000F;
     private const int WmHotKey = 0x0312;
+    private const int WmSetCursor = 0x0020;
     private const int WmAppProcessInk = 0x8001;
     private static readonly IntPtr HwndTopmost = new(-1);
     private const uint TransparentColorKey = 0x000100;
-    private static readonly Color TransparentKeyColor = Color.FromArgb(0, 1, 0);
-    private static readonly Color InkColor = Color.FromArgb(255, 255, 64, 96);
 
     private readonly MonitorInfo _monitor;
     private readonly bool _verbose;
+    private readonly InkCaptureMode _captureMode;
     private readonly NativeMethods.WndProc _wndProcDelegate;
     private readonly NativeMethods.LowLevelMouseProc _mouseHookProc;
-    private readonly Queue<PendingInkEvent> _pendingInkEvents = new();
-    private Bitmap? _inkBitmap;
-    private Graphics? _inkGraphics;
-    private Point? _lastInkPoint;
+    private readonly Queue<PenInputEvent> _pendingInkEvents = new();
+    private InkRenderer? _inkRenderer;
     private IntPtr _hwnd;
     private IntPtr _mouseHook;
     private bool _penIsDown;
     private bool _inkProcessQueued;
+    private bool _cursorHiddenForPen;
     private string _statusText = "Pen-only drawing overlay. Mouse should pass through. Ctrl+Shift+F12 closes.";
 
-    public PenInkOverlayWindow(MonitorInfo monitor, bool verbose)
+    public PenInkOverlayWindow(MonitorInfo monitor, bool verbose, InkCaptureMode captureMode)
     {
         _monitor = monitor;
         _verbose = verbose;
+        _captureMode = captureMode;
         _wndProcDelegate = WindowProc;
         _mouseHookProc = MouseHookProc;
     }
@@ -782,7 +686,14 @@ internal sealed class PenInkOverlayWindow
             LogPlacement("created");
         }
         RegisterHotKey();
-        InstallMouseHook(hInstance);
+        if (_captureMode == InkCaptureMode.PointerTarget)
+        {
+            RegisterPointerInputTarget();
+        }
+        else
+        {
+            InstallMouseHook(hInstance);
+        }
         return MessageLoop();
     }
 
@@ -797,7 +708,9 @@ internal sealed class PenInkOverlayWindow
             cbWndExtra = 0,
             hInstance = hInstance,
             hIcon = IntPtr.Zero,
-            hCursor = NativeMethods.LoadCursor(IntPtr.Zero, new IntPtr(32512)),
+            hCursor = _captureMode == InkCaptureMode.PointerTarget
+                ? IntPtr.Zero
+                : NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IdcArrow),
             hbrBackground = IntPtr.Zero,
             lpszMenuName = null,
             lpszClassName = WindowClassName,
@@ -842,11 +755,7 @@ internal sealed class PenInkOverlayWindow
             throw new InvalidOperationException($"SetLayeredWindowAttributes failed with {Marshal.GetLastWin32Error()}.");
         }
 
-        _inkBitmap = new Bitmap(Math.Max(1, _monitor.Bounds.Width), Math.Max(1, _monitor.Bounds.Height));
-        _inkGraphics = Graphics.FromImage(_inkBitmap);
-        _inkGraphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
-        _inkGraphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
-        _inkGraphics.Clear(TransparentKeyColor);
+        _inkRenderer = new InkRenderer(_monitor.Bounds.Size);
     }
 
     private void ShowAndPlaceWindow()
@@ -884,6 +793,22 @@ internal sealed class PenInkOverlayWindow
         }
     }
 
+    private void RegisterPointerInputTarget()
+    {
+        if (!PenPointerInput.RegisterTarget(_hwnd, out var error))
+        {
+            _statusText = $"RegisterPointerInputTarget failed with {error}. Ctrl+Shift+F12 closes.";
+            Console.WriteLine(_statusText);
+            Console.WriteLine("Pointer-target mode will stay open for observation, but direct pen ink is unlikely until this succeeds.");
+            InvalidateRectangle(GetStatusRectangle());
+            return;
+        }
+
+        _statusText = "Pointer-target pen ink active. Mouse should pass through. Ctrl+Shift+F12 closes.";
+        Console.WriteLine(_statusText);
+        InvalidateRectangle(GetStatusRectangle());
+    }
+
     private int MessageLoop()
     {
         while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
@@ -909,16 +834,28 @@ internal sealed class PenInkOverlayWindow
                 _inkProcessQueued = false;
                 ProcessPendingInk();
                 return IntPtr.Zero;
+            case PenPointerInput.WmPointerDown:
+            case PenPointerInput.WmPointerUpdate:
+            case PenPointerInput.WmPointerUp:
+                if (_captureMode == InkCaptureMode.PointerTarget)
+                {
+                    HandlePointerInk(message, wParam, lParam);
+                    return IntPtr.Zero;
+                }
+
+                return NativeMethods.DefWindowProc(hwnd, message, wParam, lParam);
+            case WmSetCursor when _captureMode == InkCaptureMode.PointerTarget:
+                NativeMethods.SetCursor(IntPtr.Zero);
+                return new IntPtr(1);
             case WmDestroy:
+                ShowCursorForPenIfNeeded();
                 if (_mouseHook != IntPtr.Zero)
                 {
                     NativeMethods.UnhookWindowsHookEx(_mouseHook);
                     _mouseHook = IntPtr.Zero;
                 }
-                _inkGraphics?.Dispose();
-                _inkGraphics = null;
-                _inkBitmap?.Dispose();
-                _inkBitmap = null;
+                _inkRenderer?.Dispose();
+                _inkRenderer = null;
                 NativeMethods.UnregisterHotKey(hwnd, HotKeyId);
                 NativeMethods.PostQuitMessage(0);
                 return IntPtr.Zero;
@@ -941,7 +878,7 @@ internal sealed class PenInkOverlayWindow
             graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
             graphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
             graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
-            using var transparentBrush = new SolidBrush(TransparentKeyColor);
+            using var transparentBrush = new SolidBrush(InkRenderer.TransparentKeyColor);
             using var statusBrush = new SolidBrush(Color.FromArgb(196, 22, 22, 22));
             using var statusBorderPen = new Pen(Color.FromArgb(180, 220, 220, 220), 1f);
             using var statusFont = new Font("Segoe UI", 10f, FontStyle.Regular, GraphicsUnit.Point);
@@ -949,21 +886,21 @@ internal sealed class PenInkOverlayWindow
             var clientBounds = Rectangle.FromLTRB(clientRect.Left, clientRect.Top, clientRect.Right, clientRect.Bottom);
             graphics.FillRectangle(transparentBrush, clientBounds);
 
-            if (_inkBitmap is not null)
-            {
-                graphics.DrawImageUnscaled(_inkBitmap, 0, 0);
-            }
+            _inkRenderer?.Paint(graphics);
 
-            var statusRect = new Rectangle(24, Math.Max(0, clientBounds.Bottom - 48), Math.Max(0, clientBounds.Width - 48), 28);
-            graphics.FillRectangle(statusBrush, statusRect);
-            graphics.DrawRectangle(statusBorderPen, statusRect);
-            TextRenderer.DrawText(
-                graphics,
-                _statusText,
-                statusFont,
-                Rectangle.Inflate(statusRect, -8, -2),
-                Color.FromArgb(240, 240, 240),
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            if (_captureMode != InkCaptureMode.PointerTarget)
+            {
+                var statusRect = GetStatusRectangle();
+                graphics.FillRectangle(statusBrush, statusRect);
+                graphics.DrawRectangle(statusBorderPen, statusRect);
+                TextRenderer.DrawText(
+                    graphics,
+                    _statusText,
+                    statusFont,
+                    Rectangle.Inflate(statusRect, -8, -2),
+                    Color.FromArgb(240, 240, 240),
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            }
         }
         finally
         {
@@ -994,22 +931,78 @@ internal sealed class PenInkOverlayWindow
         switch (message)
         {
             case NativeMethods.WmMouseMove:
-                EnqueuePenEvent(PendingInkEventKind.Move, localPoint);
+                EnqueuePenEvent(PenInputEventKind.Move, localPoint);
                 return new IntPtr(1);
             case NativeMethods.WmLButtonDown:
-                EnqueuePenEvent(PendingInkEventKind.Down, localPoint);
+                EnqueuePenEvent(PenInputEventKind.Down, localPoint);
                 return new IntPtr(1);
             case NativeMethods.WmLButtonUp:
-                EnqueuePenEvent(PendingInkEventKind.Up, localPoint);
+                EnqueuePenEvent(PenInputEventKind.Up, localPoint);
                 return new IntPtr(1);
             default:
                 return NativeMethods.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
         }
     }
 
-    private void EnqueuePenEvent(PendingInkEventKind kind, Point point)
+    private void HandlePointerInk(uint message, IntPtr wParam, IntPtr lParam)
     {
-        _pendingInkEvents.Enqueue(new PendingInkEvent(kind, point));
+        NativeMethods.SetCursor(IntPtr.Zero);
+        if (!PenPointerInput.TryCreatePenEvent(message, wParam, lParam, _monitor.Bounds, out var input))
+        {
+            return;
+        }
+
+        switch (input.Kind)
+        {
+            case PenInputEventKind.Down:
+                HideCursorForPenIfNeeded();
+                EnqueuePenEvent(input);
+                break;
+            case PenInputEventKind.Move:
+                if (_penIsDown)
+                {
+                    HideCursorForPenIfNeeded();
+                }
+                EnqueuePenEvent(input);
+                break;
+            case PenInputEventKind.Up:
+                EnqueuePenEvent(input);
+                ShowCursorForPenIfNeeded();
+                break;
+        }
+    }
+
+    private void HideCursorForPenIfNeeded()
+    {
+        if (_captureMode != InkCaptureMode.PointerTarget || _cursorHiddenForPen)
+        {
+            return;
+        }
+
+        NativeMethods.ShowCursor(false);
+        NativeMethods.SetCursor(IntPtr.Zero);
+        _cursorHiddenForPen = true;
+    }
+
+    private void ShowCursorForPenIfNeeded()
+    {
+        if (!_cursorHiddenForPen)
+        {
+            return;
+        }
+
+        NativeMethods.ShowCursor(true);
+        _cursorHiddenForPen = false;
+    }
+
+    private void EnqueuePenEvent(PenInputEventKind kind, Point point, uint pointerId = 0)
+    {
+        EnqueuePenEvent(new PenInputEvent(kind, point, pointerId));
+    }
+
+    private void EnqueuePenEvent(PenInputEvent input)
+    {
+        _pendingInkEvents.Enqueue(input);
         if (_inkProcessQueued || _hwnd == IntPtr.Zero)
         {
             return;
@@ -1025,13 +1018,7 @@ internal sealed class PenInkOverlayWindow
         while (_pendingInkEvents.Count > 0)
         {
             var inkEvent = _pendingInkEvents.Dequeue();
-            var eventDirty = inkEvent.Kind switch
-            {
-                PendingInkEventKind.Down => HandlePenDown(inkEvent.Point),
-                PendingInkEventKind.Move => HandlePenMove(inkEvent.Point),
-                PendingInkEventKind.Up => HandlePenUp(inkEvent.Point),
-                _ => null
-            };
+            var eventDirty = HandlePenEvent(inkEvent);
 
             if (eventDirty is Rectangle nextDirty)
             {
@@ -1047,44 +1034,69 @@ internal sealed class PenInkOverlayWindow
         }
     }
 
-    private Rectangle? HandlePenDown(Point point)
+    private Rectangle? HandlePenEvent(PenInputEvent input)
     {
+        return input.Kind switch
+        {
+            PenInputEventKind.Down => HandlePenDown(input),
+            PenInputEventKind.Move => HandlePenMove(input),
+            PenInputEventKind.Up => HandlePenUp(input),
+            _ => null
+        };
+    }
+
+    private Rectangle? HandlePenDown(PenInputEvent input)
+    {
+        var point = input.Point;
         _penIsDown = true;
-        _lastInkPoint = point;
-        var dirtyRectangle = DrawInkDot(point);
-        _statusText = $"pen-down | x={point.X} y={point.Y} | mouse stays pass-through | Ctrl+Shift+F12 closes";
+        var dirtyRectangle = _inkRenderer?.HandlePenEvent(input);
+        var eventText = $"pen-down | x={point.X} y={point.Y} | mouse stays pass-through | Ctrl+Shift+F12 closes";
         if (_verbose)
         {
-            Console.WriteLine(_statusText);
+            Console.WriteLine(eventText);
         }
+
+        if (_captureMode == InkCaptureMode.PointerTarget)
+        {
+            return dirtyRectangle;
+        }
+
+        _statusText = eventText;
         return CombineDirty(dirtyRectangle, GetStatusRectangle());
     }
 
-    private Rectangle? HandlePenMove(Point point)
+    private Rectangle? HandlePenMove(PenInputEvent input)
     {
         if (_penIsDown)
         {
-            return DrawInkSegment(point);
+            return _inkRenderer?.HandlePenEvent(input);
         }
 
         return null;
     }
 
-    private Rectangle? HandlePenUp(Point point)
+    private Rectangle? HandlePenUp(PenInputEvent input)
     {
+        var point = input.Point;
         Rectangle? dirtyRectangle = null;
         if (_penIsDown)
         {
-            dirtyRectangle = DrawInkSegment(point);
+            dirtyRectangle = _inkRenderer?.HandlePenEvent(input);
         }
 
         _penIsDown = false;
-        _lastInkPoint = null;
-        _statusText = $"pen-up | x={point.X} y={point.Y} | mouse stays pass-through | Ctrl+Shift+F12 closes";
+        var eventText = $"pen-up | x={point.X} y={point.Y} | mouse stays pass-through | Ctrl+Shift+F12 closes";
         if (_verbose)
         {
-            Console.WriteLine(_statusText);
+            Console.WriteLine(eventText);
         }
+
+        if (_captureMode == InkCaptureMode.PointerTarget)
+        {
+            return dirtyRectangle;
+        }
+
+        _statusText = eventText;
         return CombineDirty(dirtyRectangle, GetStatusRectangle());
     }
 
@@ -1107,62 +1119,6 @@ internal sealed class PenInkOverlayWindow
         {
             NativeMethods.SetWindowLongPtr(_hwnd, GwlExStyle, new IntPtr(desired));
         }
-    }
-
-    private Rectangle? DrawInkSegment(Point point)
-    {
-        if (_inkGraphics is null)
-        {
-            return null;
-        }
-
-        using var inkPen = new Pen(InkColor, 10f)
-        {
-            StartCap = System.Drawing.Drawing2D.LineCap.Round,
-            EndCap = System.Drawing.Drawing2D.LineCap.Round,
-            LineJoin = System.Drawing.Drawing2D.LineJoin.Round
-        };
-
-        if (_lastInkPoint is Point lastPoint)
-        {
-            _inkGraphics.DrawLine(inkPen, lastPoint, point);
-            _lastInkPoint = point;
-            return GetSegmentRectangle(lastPoint, point, 18);
-        }
-
-        _lastInkPoint = point;
-        return DrawInkDot(point);
-    }
-
-    private Rectangle GetDotRectangle(Point point, int diameter)
-    {
-        return Rectangle.FromLTRB(
-            point.X - (diameter / 2) - 4,
-            point.Y - (diameter / 2) - 4,
-            point.X + (diameter / 2) + 4,
-            point.Y + (diameter / 2) + 4);
-    }
-
-    private Rectangle DrawInkDot(Point point)
-    {
-        if (_inkGraphics is null)
-        {
-            return Rectangle.Empty;
-        }
-
-        using var inkBrush = new SolidBrush(InkColor);
-        const int diameter = 10;
-        _inkGraphics.FillEllipse(inkBrush, point.X - (diameter / 2), point.Y - (diameter / 2), diameter, diameter);
-        return GetDotRectangle(point, diameter);
-    }
-
-    private Rectangle GetSegmentRectangle(Point start, Point end, int padding)
-    {
-        var left = Math.Min(start.X, end.X) - padding;
-        var top = Math.Min(start.Y, end.Y) - padding;
-        var right = Math.Max(start.X, end.X) + padding;
-        var bottom = Math.Max(start.Y, end.Y) + padding;
-        return Rectangle.FromLTRB(left, top, right, bottom);
     }
 
     private Rectangle GetStatusRectangle()
@@ -1203,17 +1159,9 @@ internal sealed class PenInkOverlayWindow
         NativeMethods.InvalidateRect(_hwnd, ref nativeRect, false);
     }
 
-    private enum PendingInkEventKind
-    {
-        Down,
-        Move,
-        Up
-    }
-
-    private readonly record struct PendingInkEvent(PendingInkEventKind Kind, Point Point);
 }
 
-internal static class NativeMethods
+internal static partial class NativeMethods
 {
     public const uint LwaColorKey = 0x00000001;
     public const uint LwaAlpha = 0x00000002;
@@ -1225,6 +1173,7 @@ internal static class NativeMethods
     public const uint WmMouseMove = 0x0200;
     public const uint WmLButtonDown = 0x0201;
     public const uint WmLButtonUp = 0x0202;
+    public static readonly IntPtr IdcArrow = new(32512);
     public static readonly IntPtr DpiAwarenessContextPerMonitorAwareV2 = new(-4);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1401,6 +1350,9 @@ internal static class NativeMethods
     public static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool RegisterPointerInputTarget(IntPtr hwnd, uint pointerType);
+
+    [DllImport("user32.dll", SetLastError = true)]
     public static extern void PostQuitMessage(int nExitCode);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -1426,6 +1378,12 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetCursor(IntPtr hCursor);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern int ShowCursor(bool bShow);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool EnumDisplayMonitors(
@@ -1545,7 +1503,7 @@ internal static class NativeMethods
 
     public static string GetPointerTypeName(uint pointerId)
     {
-        if (!GetPointerType(pointerId, out var pointerType))
+        if (!TryGetPointerType(pointerId, out var pointerType))
         {
             return $"unknown({Marshal.GetLastWin32Error()})";
         }
@@ -1557,6 +1515,11 @@ internal static class NativeMethods
             4 => "mouse",
             _ => $"pointer({pointerType})"
         };
+    }
+
+    public static bool TryGetPointerType(uint pointerId, out uint pointerType)
+    {
+        return GetPointerType(pointerId, out pointerType);
     }
 
     public static Point GetPointFromLParam(IntPtr lParam)

@@ -27,6 +27,19 @@
       "problemMatcher": "$msCompile"
     },
     {
+      "label": "build-app-uiaccess",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/Overdraw.App/Overdraw.App.csproj",
+        "/property:UiAccess=true",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
       "label": "run-overlay-spike",
       "type": "process",
       "command": "dotnet",

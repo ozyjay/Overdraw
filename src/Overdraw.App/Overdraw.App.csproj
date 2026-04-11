@@ -7,5 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>Overdraw.App</RootNamespace>
+    <ApplicationManifest Condition="'$(UiAccess)' == 'true'">app.uiaccess.manifest</ApplicationManifest>
+    <ApplicationManifest Condition="'$(UiAccess)' != 'true'">app.manifest</ApplicationManifest>
   </PropertyGroup>
 </Project>

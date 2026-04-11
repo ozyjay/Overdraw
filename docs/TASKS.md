@@ -22,20 +22,25 @@
 - Document hardware and driver assumptions discovered during testing.
 
 ## Milestone 3: First End-To-End Prototype
-- Combine the overlay and pen input spikes into a runnable prototype.
-- Render visible strokes across the active screen area.
-- Ensure mouse movement alone does not create strokes.
-- Preserve underlying application usability during annotation.
+- Completed: combine click-through overlay, UIAccess pointer capture, and red ink rendering in `--pointer-ink-spike`.
+- Completed: preserve mouse and keyboard interaction while drawing with XP-Pen.
+- Completed: suppress the blue spinning cursor and remove down/up flicker in pointer-target mode.
+- Keep the hook-based `--ink-spike` runnable as a fallback diagnostic, with system-cursor-following documented as a known limitation.
+- Continue refactoring remaining Win32 window classes into platform modules without changing behavior.
 
 ## Milestone 4: Drawing Engine Stabilization
 - Introduce stroke data structures and lifecycle management.
 - Improve stroke smoothness and redraw performance.
 - Add clear, minimal controls for clearing or exiting the overlay session.
 - Validate behavior across longer annotation sessions.
+- Promote native pointer capture with `uiAccess` into the production input path if cursor and latency behavior remain acceptable.
+- Add automated coverage around CLI parsing, monitor selection, normalized pen event routing, and renderer dirty-rectangle behavior.
 
 ## Milestone 5: Configuration And Packaging
 - Add basic configuration for pen behavior, colors, and stroke width if justified.
 - Define packaging and local installation workflow for Windows.
+- Add a signed test packaging path if `uiAccess` is required for the production input model.
+- Convert the UIAccess test packaging path into a repeatable development workflow if native pointer capture is selected.
 - Prepare repeatable setup instructions for XP-Pen users.
 
 ## Milestone 6: Quality And Release Readiness

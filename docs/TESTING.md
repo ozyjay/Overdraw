@@ -21,6 +21,17 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 - Move the mouse without the pen and confirm no accidental strokes are created.
 - Clear or exit the overlay session and confirm the desktop returns to normal behavior.
 
+## Current XP-Pen Regression Checklist
+- Publish/sign/install the UIAccess build with `scripts\Publish-UiAccessTestBuild.ps1`.
+- Run `scripts\Test-UiAccessBuild.ps1` and confirm signature, secure-location, thumbprint, and LocalMachine-root checks pass.
+- Run `C:\Program Files\Overdraw\Overdraw.App.exe --pointer-ink-spike --monitor 1 --verbose`.
+- Confirm terminal output includes `Pointer-target pen ink active`.
+- Confirm XP-Pen strokes render as red ink with no debug/status bar on the overlay.
+- Confirm right-click, typing, and normal mouse use still reach the underlying desktop/app.
+- Confirm the normal pointer is not moved to the pen location and no blue spinning cursor appears.
+- Confirm pen down/up does not flicker.
+- Keep `--ink-spike` runnable only as a fallback comparison, and note that its system-cursor-following behavior is expected.
+
 ## Failure Cases To Watch
 - Overlay becomes the focused window unexpectedly.
 - Mouse clicks stop reaching the underlying app.

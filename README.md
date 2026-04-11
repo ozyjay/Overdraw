@@ -64,6 +64,30 @@ dotnet run --project src/Overdraw.App -- --ink-spike --monitor 1
 
 This is an experiment, not a finished interaction model. Its purpose is to test whether pen-originated mouse messages can be intercepted for drawing while real mouse input still passes through to the underlying applications.
 
+There is also a native pointer-target ink experiment that tries to receive pen pointer input directly instead of using pen-originated mouse messages:
+
+```powershell
+dotnet run --project src/Overdraw.App -- --pointer-ink-spike --monitor 1
+```
+
+This is the preferred direction if Windows allows the app to register as a pen pointer target while the overlay remains click-through. If registration fails, the app prints the Win32 error and stays open for observation.
+
+On normal local builds, `--pointer-ink-spike` may fail with `ERROR_ACCESS_DENIED`. That is now tracked in `docs/UIACCESS.md`; the likely next validation path is a signed `uiAccess=true` build installed from a secure Windows location.
+
+For the UIAccess test path:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\New-OverdrawTestCertificate.ps1 -TrustInLocalMachineRoot
+powershell -ExecutionPolicy Bypass -File .\scripts\Publish-UiAccessTestBuild.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Test-UiAccessBuild.ps1
+& 'C:\Program Files\Overdraw\Overdraw.App.exe' --pointer-ink-spike --monitor 1 --verbose
+```
+
+Run these from an elevated PowerShell session. `uiAccess=true` launch checks require the executable to be signed by a trusted certificate chain and installed in a secure location such as `C:\Program Files\Overdraw`.
+If the launch fails with `A referral was returned from the server`, confirm the preflight check reports `Trusted in LocalMachine Root: True`; current-user root trust is not the intended test path.
+
+The signed UIAccess build path has been validated far enough to launch from `C:\Program Files\Overdraw`, preserve normal mouse/keyboard interaction, receive XP-Pen pointer input, and draw without moving the normal pointer to the pen location. A scoped cursor suppression experiment is in place for the remaining issue where Windows can show a busy/spinning cursor near the pen while drawing.
+
 Build the project with:
 
 ```powershell
@@ -85,4 +109,6 @@ dotnet run --project src/Overdraw.App -- --overlay-spike --monitor 1
 `--monitor` accepts `primary`, a zero-based index from `--list-monitors`, or a device name such as `\\.\DISPLAY2`.
 
 ## Status
-This repository now contains a .NET 8 Windows prototype scaffold plus project documentation. Monitor selection is working in the current spike, and a first pen diagnostics mode exists. Pen-specific drawing and fully validated mouse click-through behavior are still pending.
+This repository now contains a .NET 8 Windows prototype scaffold plus project documentation. Monitor selection, click-through overlay behavior, XP-Pen pointer detection, signed UIAccess launch, and native pointer-target ink drawing have been validated on the target setup.
+
+The current production direction is `--pointer-ink-spike` from the signed `uiAccess=true` install. The hook-based `--ink-spike` remains available as a fallback diagnostic, but it is not the preferred interaction model because it follows the system cursor.

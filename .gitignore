@@ -1,4 +1,5 @@
 .dotnet/
+artifacts/
 build/
 dist/
 bin/
