@@ -30,6 +30,10 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 - Confirm right-click, typing, and normal mouse use still reach the underlying desktop/app.
 - Confirm the normal pointer is not moved to the pen location and no blue spinning cursor appears.
 - Confirm pen down/up does not flicker.
+- Draw three strokes, press `Ctrl+Shift+Z` twice, press `Ctrl+Shift+Y` once, and confirm undo/redo changes only overlay ink.
+- Press `Ctrl+Shift+Backspace` and confirm all ink clears without closing Overdraw.
+- Press `Ctrl+Shift+C`, draw a new stroke, and confirm only the new stroke changes colour.
+- Press `Ctrl+Shift+Down` or `Ctrl+Shift+Up`, draw a new stroke, and confirm only the new stroke changes opacity.
 - Keep `--ink-spike` runnable only as a fallback comparison, and note that its system-cursor-following behavior is expected.
 
 ## Failure Cases To Watch

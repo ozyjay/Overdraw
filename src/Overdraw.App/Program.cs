@@ -629,12 +629,24 @@ internal enum InkCaptureMode
 internal sealed class PenInkOverlayWindow
 {
     private const string WindowClassName = "OverdrawPenInkOverlayWindow";
-    private const int HotKeyId = 0x0BD3;
+    private const int ExitHotKeyId = 0x0BD3;
+    private const int UndoHotKeyId = 0x0BD4;
+    private const int RedoHotKeyId = 0x0BD5;
+    private const int ClearHotKeyId = 0x0BD6;
+    private const int CycleColorHotKeyId = 0x0BD7;
+    private const int IncreaseOpacityHotKeyId = 0x0BD8;
+    private const int DecreaseOpacityHotKeyId = 0x0BD9;
     private const int GwlExStyle = -20;
     private const int WhMouseLl = 14;
     private const uint ModControl = 0x0002;
     private const uint ModShift = 0x0004;
     private const uint ModNoRepeat = 0x4000;
+    private const uint VkBackspace = 0x08;
+    private const uint VkUp = 0x26;
+    private const uint VkDown = 0x28;
+    private const uint VkC = 0x43;
+    private const uint VkY = 0x59;
+    private const uint VkZ = 0x5A;
     private const uint VkF12 = 0x7B;
     private const int WsPopup = unchecked((int)0x80000000);
     private const int WsVisible = 0x10000000;
@@ -685,7 +697,7 @@ internal sealed class PenInkOverlayWindow
         {
             LogPlacement("created");
         }
-        RegisterHotKey();
+        RegisterHotKeys();
         if (_captureMode == InkCaptureMode.PointerTarget)
         {
             RegisterPointerInputTarget();
@@ -776,11 +788,22 @@ internal sealed class PenInkOverlayWindow
         NativeMethods.UpdateWindow(_hwnd);
     }
 
-    private void RegisterHotKey()
+    private void RegisterHotKeys()
     {
-        if (!NativeMethods.RegisterHotKey(_hwnd, HotKeyId, ModControl | ModShift | ModNoRepeat, VkF12))
+        RegisterHotKey(ExitHotKeyId, VkF12, "Ctrl+Shift+F12");
+        RegisterHotKey(UndoHotKeyId, VkZ, "Ctrl+Shift+Z");
+        RegisterHotKey(RedoHotKeyId, VkY, "Ctrl+Shift+Y");
+        RegisterHotKey(ClearHotKeyId, VkBackspace, "Ctrl+Shift+Backspace");
+        RegisterHotKey(CycleColorHotKeyId, VkC, "Ctrl+Shift+C");
+        RegisterHotKey(IncreaseOpacityHotKeyId, VkUp, "Ctrl+Shift+Up");
+        RegisterHotKey(DecreaseOpacityHotKeyId, VkDown, "Ctrl+Shift+Down");
+    }
+
+    private void RegisterHotKey(int id, uint virtualKey, string description)
+    {
+        if (!NativeMethods.RegisterHotKey(_hwnd, id, ModControl | ModShift | ModNoRepeat, virtualKey))
         {
-            throw new InvalidOperationException("Failed to register Ctrl+Shift+F12 hotkey.");
+            throw new InvalidOperationException($"Failed to register {description} hotkey.");
         }
     }
 
@@ -827,8 +850,11 @@ internal sealed class PenInkOverlayWindow
             case WmPaint:
                 Paint(hwnd);
                 return IntPtr.Zero;
-            case WmHotKey when wParam == new IntPtr(HotKeyId):
+            case WmHotKey when wParam == new IntPtr(ExitHotKeyId):
                 NativeMethods.DestroyWindow(hwnd);
+                return IntPtr.Zero;
+            case WmHotKey:
+                HandleDrawingHotKey(wParam);
                 return IntPtr.Zero;
             case WmAppProcessInk:
                 _inkProcessQueued = false;
@@ -856,7 +882,7 @@ internal sealed class PenInkOverlayWindow
                 }
                 _inkRenderer?.Dispose();
                 _inkRenderer = null;
-                NativeMethods.UnregisterHotKey(hwnd, HotKeyId);
+                UnregisterHotKeys(hwnd);
                 NativeMethods.PostQuitMessage(0);
                 return IntPtr.Zero;
             default:
@@ -906,6 +932,42 @@ internal sealed class PenInkOverlayWindow
         {
             NativeMethods.EndPaint(hwnd, ref paintStruct);
         }
+    }
+
+    private void HandleDrawingHotKey(IntPtr wParam)
+    {
+        var id = wParam.ToInt32();
+        Rectangle? dirtyRectangle = id switch
+        {
+            UndoHotKeyId => _inkRenderer?.Undo(),
+            RedoHotKeyId => _inkRenderer?.Redo(),
+            ClearHotKeyId => _inkRenderer?.Clear(),
+            CycleColorHotKeyId => _inkRenderer?.CycleColor(),
+            IncreaseOpacityHotKeyId => _inkRenderer?.IncreaseOpacity(),
+            DecreaseOpacityHotKeyId => _inkRenderer?.DecreaseOpacity(),
+            _ => null
+        };
+
+        if (_verbose && id is CycleColorHotKeyId or IncreaseOpacityHotKeyId or DecreaseOpacityHotKeyId && _inkRenderer is not null)
+        {
+            Console.WriteLine($"brush | {_inkRenderer.CurrentBrushDescription}");
+        }
+
+        if (dirtyRectangle is Rectangle dirty)
+        {
+            InvalidateRectangle(dirty);
+        }
+    }
+
+    private static void UnregisterHotKeys(IntPtr hwnd)
+    {
+        NativeMethods.UnregisterHotKey(hwnd, ExitHotKeyId);
+        NativeMethods.UnregisterHotKey(hwnd, UndoHotKeyId);
+        NativeMethods.UnregisterHotKey(hwnd, RedoHotKeyId);
+        NativeMethods.UnregisterHotKey(hwnd, ClearHotKeyId);
+        NativeMethods.UnregisterHotKey(hwnd, CycleColorHotKeyId);
+        NativeMethods.UnregisterHotKey(hwnd, IncreaseOpacityHotKeyId);
+        NativeMethods.UnregisterHotKey(hwnd, DecreaseOpacityHotKeyId);
     }
 
     private IntPtr MouseHookProc(int nCode, IntPtr wParam, IntPtr lParam)

@@ -29,9 +29,10 @@
 - Continue refactoring remaining Win32 window classes into platform modules without changing behavior.
 
 ## Milestone 4: Drawing Engine Stabilization
-- Introduce stroke data structures and lifecycle management.
+- Completed: introduce stroke data structures and lifecycle management for undoable ink.
+- Completed: add keyboard controls for undo, redo, clear all, colour cycling, and opacity adjustment.
 - Improve stroke smoothness and redraw performance.
-- Add clear, minimal controls for clearing or exiting the overlay session.
+- Add hardware eraser detection for the XP-Pen pen end if Windows exposes reliable eraser/inverted pointer state.
 - Validate behavior across longer annotation sessions.
 - Promote native pointer capture with `uiAccess` into the production input path if cursor and latency behavior remain acceptable.
 - Add automated coverage around CLI parsing, monitor selection, normalized pen event routing, and renderer dirty-rectangle behavior.

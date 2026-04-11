@@ -88,6 +88,18 @@ If the launch fails with `A referral was returned from the server`, confirm the 
 
 The signed UIAccess build path has been validated far enough to launch from `C:\Program Files\Overdraw`, preserve normal mouse/keyboard interaction, receive XP-Pen pointer input, and draw without moving the normal pointer to the pen location. A scoped cursor suppression experiment is in place for the remaining issue where Windows can show a busy/spinning cursor near the pen while drawing.
 
+Current ink controls while an ink overlay is running:
+
+- `Ctrl+Shift+Z`: undo the last stroke.
+- `Ctrl+Shift+Y`: redo the last undone stroke.
+- `Ctrl+Shift+Backspace`: clear all ink.
+- `Ctrl+Shift+C`: cycle the colour for future strokes.
+- `Ctrl+Shift+Up`: increase opacity for future strokes.
+- `Ctrl+Shift+Down`: decrease opacity for future strokes.
+- `Ctrl+Shift+F12`: close Overdraw.
+
+Colour and opacity changes apply only to new strokes. Existing strokes keep the colour and opacity they had when drawn. Hardware eraser support is planned after the stroke-history model is validated.
+
 Build the project with:
 
 ```powershell
