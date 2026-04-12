@@ -40,8 +40,9 @@
 ## Milestone 5: Configuration And Packaging
 - Add basic configuration for pen behavior, colors, and stroke width if justified.
 - Define packaging and local installation workflow for Windows.
-- Add a signed test packaging path if `uiAccess` is required for the production input model.
-- Convert the UIAccess test packaging path into a repeatable development workflow if native pointer capture is selected.
+- Completed: add a signed test packaging path for the `uiAccess` pointer-target input model.
+- Completed: make the UIAccess test packaging path repeatable with publish, preflight, clean install, and cleanup scripts.
+- Completed: add a local installer wrapper that publishes, signs, installs, preflights, and creates shortcuts.
 - Prepare repeatable setup instructions for XP-Pen users.
 
 ## Milestone 6: Quality And Release Readiness

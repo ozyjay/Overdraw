@@ -53,11 +53,40 @@ Use an elevated PowerShell session for `-TrustInLocalMachineRoot`. Current-user 
 
 Do not use `-TrustInCurrentUserRoot` for the UIAccess launch test unless you are intentionally testing a weaker trust path. A `uiAccess=true` executable can still fail to start with `A referral was returned from the server` when the signer is not trusted at the machine level.
 
+## Installer Script
+For normal local installation, use the installer wrapper from an elevated PowerShell session:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Install-Overdraw.ps1 -Monitor 1
+```
+
+The installer script:
+
+- Creates and trusts the local UIAccess test certificate if the repo thumbprint file is missing.
+- Publishes the `uiAccess=true` build.
+- Signs the executable.
+- Installs into `C:\Program Files\Overdraw`.
+- Runs `Test-UiAccessBuild.ps1`.
+- Creates common Start Menu and Desktop shortcuts that launch `--pointer-ink-spike --monitor <value>`.
+
+Optional installer switches:
+
+- `-Monitor <selector>`: sets the monitor selector used by generated shortcuts.
+- `-VerboseLaunch`: adds `--verbose` to generated shortcuts.
+- `-SelfContained`: publish without depending on a machine-level .NET runtime install.
+- `-SingleFile`: publish as a single executable; validate UIAccess launch before relying on this shape.
+- `-NoDesktopShortcut`: skip the desktop shortcut.
+- `-NoStartMenuShortcut`: skip the Start Menu shortcut.
+
+This is a development installer, not a production MSI. It intentionally uses the local test certificate workflow until Overdraw has a real release signing strategy.
+
 Publish, sign, and install the UIAccess test build:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\Publish-UiAccessTestBuild.ps1
 ```
+
+The publish script removes stale files from `C:\Program Files\Overdraw` before copying the new build unless `-NoCleanInstall` is passed. This keeps framework-dependent, self-contained, and future single-file publish experiments from leaving old files behind in the install directory.
 
 Run preflight checks:
 
@@ -74,11 +103,34 @@ The preflight output should show:
 
 The install step writes to `C:\Program Files\Overdraw` by default. Run PowerShell as Administrator for that step, or pass `-SkipInstall` to publish/sign only.
 
+Optional publish switches:
+
+- `-SelfContained`: publish a build that does not require a machine-level .NET runtime install.
+- `-SingleFile`: publish as a single executable. This should be treated as an experiment until UIAccess launch and signing behavior are validated on the target machine.
+- `-SkipInstall`: publish and sign only, without copying into `C:\Program Files\Overdraw`.
+- `-NoCleanInstall`: copy over the install directory without removing stale files first. Avoid this unless you are debugging install behavior.
+
 Run the installed build:
 
 ```powershell
 & 'C:\Program Files\Overdraw\Overdraw.App.exe' --pointer-ink-spike --monitor 1 --verbose
 ```
+
+Remove the installed test build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Remove-UiAccessTestBuild.ps1
+```
+
+This also removes the Start Menu and Desktop shortcuts created by `Install-Overdraw.ps1`.
+
+Remove the installed build and local test certificate entries when you are done with UIAccess testing:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Remove-UiAccessTestBuild.ps1 -RemoveCertificates
+```
+
+Use an elevated PowerShell session when removing `C:\Program Files\Overdraw` or `Cert:\LocalMachine\Root` entries.
 
 ## Current Decision
 Keep `--ink-spike` as the working fallback because it proves pen drawing plus mouse pass-through. Keep `--pointer-ink-spike` as the preferred architecture experiment.

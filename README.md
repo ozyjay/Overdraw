@@ -86,6 +86,34 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Test-UiAccessBuild.ps1
 Run these from an elevated PowerShell session. `uiAccess=true` launch checks require the executable to be signed by a trusted certificate chain and installed in a secure location such as `C:\Program Files\Overdraw`.
 If the launch fails with `A referral was returned from the server`, confirm the preflight check reports `Trusted in LocalMachine Root: True`; current-user root trust is not the intended test path.
 
+After the certificate has been created once, normal development iterations usually only need:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Publish-UiAccessTestBuild.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Test-UiAccessBuild.ps1
+& 'C:\Program Files\Overdraw\Overdraw.App.exe' --pointer-ink-spike --monitor 1 --verbose
+```
+
+For a one-command local install that creates the certificate if needed, publishes, signs, installs, runs preflight checks, and creates shortcuts:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Install-Overdraw.ps1 -Monitor 1
+```
+
+Use `-Monitor 1` for the current XP-Pen setup, or another selector accepted by `--monitor`. Add `-VerboseLaunch` if you want the generated shortcuts to include `--verbose`.
+
+The publish script cleans the installed test directory before copying the new build, which avoids stale files from older publish shapes. To remove the installed test build later:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Remove-UiAccessTestBuild.ps1
+```
+
+To also remove the local test certificate trust/signing entries, run from an elevated PowerShell session:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Remove-UiAccessTestBuild.ps1 -RemoveCertificates
+```
+
 The signed UIAccess build path has been validated far enough to launch from `C:\Program Files\Overdraw`, preserve normal mouse/keyboard interaction, receive XP-Pen pointer input, and draw without moving the normal pointer to the pen location. A scoped cursor suppression experiment is in place for the remaining issue where Windows can show a busy/spinning cursor near the pen while drawing.
 
 Current ink controls while an ink overlay is running:

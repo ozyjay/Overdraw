@@ -26,13 +26,22 @@ if (Test-Path $fullThumbprintPath) {
     $matchesExpectedThumbprint = $signature.SignerCertificate -and
         $signature.SignerCertificate.Thumbprint -eq $expectedThumbprint
     Write-Host "Matches repo thumbprint: $matchesExpectedThumbprint"
+
+    if (-not $matchesExpectedThumbprint) {
+        throw "The executable signer does not match the repo thumbprint file."
+    }
 }
 
 if ($signature.SignerCertificate) {
     $rootCertificate = Get-ChildItem Cert:\LocalMachine\Root |
         Where-Object { $_.Thumbprint -eq $signature.SignerCertificate.Thumbprint } |
         Select-Object -First 1
-    Write-Host "Trusted in LocalMachine Root: $($null -ne $rootCertificate)"
+    $trustedInLocalMachineRoot = $null -ne $rootCertificate
+    Write-Host "Trusted in LocalMachine Root: $trustedInLocalMachineRoot"
+
+    if (-not $trustedInLocalMachineRoot) {
+        throw "The executable signer is not trusted in Cert:\LocalMachine\Root. UIAccess launch can fail with 'A referral was returned from the server'."
+    }
 }
 
 $programFiles = [Environment]::GetFolderPath("ProgramFiles")

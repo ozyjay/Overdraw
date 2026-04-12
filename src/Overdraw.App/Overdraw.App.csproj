@@ -7,6 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>Overdraw.App</RootNamespace>
+    <ApplicationIcon>..\..\assets\icon\overdraw.ico</ApplicationIcon>
     <ApplicationManifest Condition="'$(UiAccess)' == 'true'">app.uiaccess.manifest</ApplicationManifest>
     <ApplicationManifest Condition="'$(UiAccess)' != 'true'">app.manifest</ApplicationManifest>
   </PropertyGroup>
