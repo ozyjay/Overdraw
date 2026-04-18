@@ -8,6 +8,7 @@ internal sealed class KeyDisplayState
     private string _lingerDisplayText = string.Empty;
     private long _lingerUntilTick;
     private bool _isSuppressedShortcut;
+    private bool _showLastShortcutUntilModifiersReleased;
 
     public bool IsEnabled { get; private set; }
 
@@ -49,12 +50,25 @@ internal sealed class KeyDisplayState
             return false;
         }
 
-        if (virtualKey == VkSpace || (!IsModifier(virtualKey) && !HasModifierPressed()))
+        var previousDisplayText = DisplayText;
+        if (_pressedKeys.Count == 0)
         {
-            return false;
+            _isSuppressedShortcut = false;
+            _showLastShortcutUntilModifiersReleased = false;
+            ClearDisplayText();
         }
 
-        var previousDisplayText = DisplayText;
+        if (virtualKey == VkSpace || (!IsModifier(virtualKey) && !HasModifierPressed()))
+        {
+            return DisplayText != previousDisplayText;
+        }
+
+        if (!IsModifier(virtualKey) && ShouldIgnoreShortcutKey(virtualKey))
+        {
+            ClearDisplayText();
+            return DisplayText != previousDisplayText;
+        }
+
         var changed = _pressedKeys.Add(virtualKey);
         if (IsOverdrawShortcutPressed())
         {
@@ -100,9 +114,12 @@ internal sealed class KeyDisplayState
 
         if (_pressedKeys.Count == 0)
         {
-            _lingerUntilTick = string.IsNullOrEmpty(_lingerDisplayText)
-                ? 0
-                : Environment.TickCount64 + LingerMilliseconds;
+            _showLastShortcutUntilModifiersReleased = false;
+            var shouldLinger = !string.IsNullOrEmpty(_lingerDisplayText);
+            _lingerUntilTick = shouldLinger
+                ? Environment.TickCount64 + LingerMilliseconds
+                : 0;
+            return changed && (shouldLinger || DisplayText != previousDisplayText);
         }
         else if (HasModifierPressed())
         {
@@ -111,9 +128,12 @@ internal sealed class KeyDisplayState
         else
         {
             _pressedKeys.Clear();
-            _lingerUntilTick = string.IsNullOrEmpty(_lingerDisplayText)
-                ? 0
-                : Environment.TickCount64 + LingerMilliseconds;
+            _showLastShortcutUntilModifiersReleased = false;
+            var shouldLinger = !string.IsNullOrEmpty(_lingerDisplayText);
+            _lingerUntilTick = shouldLinger
+                ? Environment.TickCount64 + LingerMilliseconds
+                : 0;
+            return changed && (shouldLinger || DisplayText != previousDisplayText);
         }
 
         return changed && DisplayText != previousDisplayText;
@@ -131,6 +151,7 @@ internal sealed class KeyDisplayState
         _lastDisplayText = string.Empty;
         _lingerDisplayText = string.Empty;
         _lingerUntilTick = 0;
+        _showLastShortcutUntilModifiersReleased = false;
     }
 
     private void UpdateDisplayText()
@@ -149,7 +170,7 @@ internal sealed class KeyDisplayState
         }
 
         var key = _pressedKeys
-            .Where(static key => !IsModifier(key) && key != VkSpace)
+            .Where(key => !IsModifier(key) && key != VkSpace && !ShouldIgnoreShortcutKey(key))
             .OrderBy(static key => key)
             .Select(GetKeyName)
             .FirstOrDefault(static name => !string.IsNullOrEmpty(name));
@@ -157,7 +178,9 @@ internal sealed class KeyDisplayState
         var hasNonModifierKey = !string.IsNullOrEmpty(key);
         if (!hasNonModifierKey)
         {
-            _lastDisplayText = string.Empty;
+            _lastDisplayText = !_showLastShortcutUntilModifiersReleased || string.IsNullOrEmpty(_lingerDisplayText)
+                ? string.Empty
+                : _lingerDisplayText;
             _lingerUntilTick = 0;
             return;
         }
@@ -165,6 +188,7 @@ internal sealed class KeyDisplayState
         parts.Add(key!);
         _lastDisplayText = string.Join("+", parts);
         _lingerDisplayText = _lastDisplayText;
+        _showLastShortcutUntilModifiersReleased = true;
         _lingerUntilTick = 0;
     }
 
@@ -202,6 +226,11 @@ internal sealed class KeyDisplayState
             _pressedKeys.Contains(VkRightShift);
     }
 
+    private bool ShouldIgnoreShortcutKey(uint virtualKey)
+    {
+        return HasShiftPressed() && IsNormalKey(virtualKey);
+    }
+
     private static bool IsModifier(uint virtualKey)
     {
         return virtualKey is VkControl
@@ -215,6 +244,11 @@ internal sealed class KeyDisplayState
             or VkRightMenu
             or VkLeftWin
             or VkRightWin;
+    }
+
+    private static bool IsNormalKey(uint virtualKey)
+    {
+        return virtualKey is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A;
     }
 
     private static string GetKeyName(uint virtualKey)

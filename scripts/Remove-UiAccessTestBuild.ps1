@@ -3,6 +3,7 @@ param(
     [string] $CertificateSubject = "CN=Overdraw UIAccess Test",
     [string] $ThumbprintPath = "artifacts\certificates\overdraw-uiaccess-test.thumbprint.txt",
     [switch] $RemoveCertificates,
+    [switch] $RemoveAllMatchingCertificates,
     [switch] $RemoveArtifacts,
     [switch] $KeepShortcuts
 )
@@ -26,15 +27,19 @@ function Test-IsAdministrator {
 }
 
 function Get-TargetCertificateThumbprints {
-    if (Test-Path $fullThumbprintPath) {
-        return @((Get-Content $fullThumbprintPath -Raw).Trim())
-    }
-
     $certificates = @(
         Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue
         Get-ChildItem Cert:\CurrentUser\Root -ErrorAction SilentlyContinue
         Get-ChildItem Cert:\LocalMachine\Root -ErrorAction SilentlyContinue
     ) | Where-Object { $_ -and $_.Subject -eq $CertificateSubject }
+
+    if ($RemoveAllMatchingCertificates) {
+        return @($certificates | Select-Object -ExpandProperty Thumbprint -Unique)
+    }
+
+    if (Test-Path $fullThumbprintPath) {
+        return @((Get-Content $fullThumbprintPath -Raw).Trim())
+    }
 
     return @($certificates | Select-Object -ExpandProperty Thumbprint -Unique)
 }
