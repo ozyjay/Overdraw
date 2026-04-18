@@ -155,16 +155,16 @@ internal sealed class KeyDisplayState
             .FirstOrDefault(static name => !string.IsNullOrEmpty(name));
 
         var hasNonModifierKey = !string.IsNullOrEmpty(key);
-        if (hasNonModifierKey)
+        if (!hasNonModifierKey)
         {
-            parts.Add(key!);
+            _lastDisplayText = string.Empty;
+            _lingerUntilTick = 0;
+            return;
         }
 
+        parts.Add(key!);
         _lastDisplayText = string.Join("+", parts);
-        if (hasNonModifierKey || string.IsNullOrEmpty(_lingerDisplayText))
-        {
-            _lingerDisplayText = _lastDisplayText;
-        }
+        _lingerDisplayText = _lastDisplayText;
         _lingerUntilTick = 0;
     }
 
