@@ -36,45 +36,124 @@ A user with an XP-Pen display wants to circle code, sketch UI ideas, mark docume
 3. Render low-latency strokes across the desktop.
 4. Preserve stability and focus behavior while the overlay is active.
 
-## Current Spike
-With a local .NET 8 environment, the current feasibility prototype can be run with:
+## Quick Setup
+
+From an elevated PowerShell terminal outside VS Code:
+
+```powershell
+cd E:\Data\GithubProjects\Overdraw
+powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Overdraw.ps1 -Monitor 1 -VerboseLaunch
+```
+
+This builds the solution, creates and trusts the local UIAccess test certificate if needed, publishes, signs, installs to `C:\Program Files\Overdraw`, runs preflight checks, and creates shortcuts.
+
+To launch Overdraw automatically after setup:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Overdraw.ps1 -Monitor 1 -VerboseLaunch -Launch
+```
+
+## Workflow
+
+Use PowerShell from the repository root:
+
+```powershell
+cd E:\Data\GithubProjects\Overdraw
+```
+
+Install the .NET 8 SDK before building or running from source. For UIAccess install, signing, and `C:\Program Files\Overdraw` updates, use an elevated PowerShell session or run VS Code as Administrator.
+
+### 1. Build
+
+Build the solution first:
+
+```powershell
+dotnet build Overdraw.sln
+```
+
+### 2. Pick A Monitor
+
+For multi-monitor setups, list the detected displays:
+
+```powershell
+dotnet run --project src/Overdraw.App -- --list-monitors
+```
+
+`--monitor` accepts `primary`, a zero-based index from `--list-monitors`, or a device name such as `\\.\DISPLAY2`.
+
+The current XP-Pen setup usually uses:
+
+```powershell
+--monitor 1
+```
+
+### 3. Run From Source
+
+Run the basic click-through overlay spike:
 
 ```powershell
 dotnet run --project src/Overdraw.App -- --overlay-spike
 ```
 
-This spike is only for validating overlay window behavior on Windows.
+This validates overlay window placement, always-on-top behavior, focus avoidance, and mouse click-through behavior. It closes with `Ctrl+Shift+F12`.
 
-The current spike is a native Windows Forms window with Win32 extended styles and hit-testing overrides so we can validate monitor targeting and true mouse click-through behavior in a more suitable stack.
-The overlay is designed to avoid taking focus, so it closes with `Ctrl+Shift+F12` rather than `Esc`.
-
-There is also a pen diagnostics mode that opens an interactive full-screen window on the selected monitor and reports whether Windows sees the incoming pointer as `pen`, `mouse`, or another pointer type:
+Run pen diagnostics:
 
 ```powershell
 dotnet run --project src/Overdraw.App -- --pen-spike --monitor 1
 ```
 
-Use `--verbose` with either spike to print extra placement or pointer diagnostics to the terminal.
+This opens an interactive full-screen window on the selected monitor and reports whether Windows sees incoming pointer input as `pen`, `mouse`, or another pointer type.
 
-There is now an experimental combined mode that keeps the overlay click-through for normal mouse usage while using a low-level mouse hook to treat pen-originated mouse messages as drawing input:
+Run the hook-based ink fallback:
 
 ```powershell
 dotnet run --project src/Overdraw.App -- --ink-spike --monitor 1
 ```
 
-This is an experiment, not a finished interaction model. Its purpose is to test whether pen-originated mouse messages can be intercepted for drawing while real mouse input still passes through to the underlying applications.
+This keeps the overlay click-through for normal mouse usage while using a low-level mouse hook to treat pen-originated mouse messages as drawing input. It remains available as a fallback diagnostic, but it is not the preferred interaction model because it follows the system cursor.
 
-There is also a native pointer-target ink experiment that tries to receive pen pointer input directly instead of using pen-originated mouse messages:
+Run the preferred pointer-target ink path:
 
 ```powershell
 dotnet run --project src/Overdraw.App -- --pointer-ink-spike --monitor 1
 ```
 
-This is the preferred direction if Windows allows the app to register as a pen pointer target while the overlay remains click-through. If registration fails, the app prints the Win32 error and stays open for observation.
+This tries to receive pen pointer input directly instead of using pen-originated mouse messages. If registration fails, the app prints the Win32 error and stays open for observation.
 
-On normal local builds, `--pointer-ink-spike` may fail with `ERROR_ACCESS_DENIED`. That is now tracked in `docs/UIACCESS.md`; the likely next validation path is a signed `uiAccess=true` build installed from a secure Windows location.
+Use `--verbose` with any run mode to print extra placement or pointer diagnostics:
 
-For the UIAccess test path:
+```powershell
+dotnet run --project src/Overdraw.App -- --pointer-ink-spike --monitor 1 --verbose
+```
+
+### 4. Install The UIAccess Build
+
+On normal local builds, `--pointer-ink-spike` may fail with `ERROR_ACCESS_DENIED`. The preferred validation path is a signed `uiAccess=true` build installed from a secure Windows location. See `docs/UIACCESS.md` for details.
+
+The easiest full setup path is one command from an elevated PowerShell session outside VS Code:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Overdraw.ps1 -Monitor 1 -VerboseLaunch
+```
+
+This builds the solution, creates and trusts the local UIAccess test certificate if needed, publishes, signs, installs to `C:\Program Files\Overdraw`, runs preflight checks, and creates shortcuts.
+
+To launch Overdraw automatically after setup, add `-Launch`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Overdraw.ps1 -Monitor 1 -VerboseLaunch -Launch
+```
+
+If you only want to run the install step without the initial solution build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Install-Overdraw.ps1 -Monitor 1
+```
+
+Use `-Monitor 1` for the current XP-Pen setup, or another selector accepted by `--monitor`. Add `-VerboseLaunch` if you want generated shortcuts to include `--verbose`.
+
+To do the UIAccess setup manually the first time:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\New-OverdrawTestCertificate.ps1 -TrustInLocalMachineRoot
@@ -83,10 +162,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Test-UiAccessBuild.ps1
 & 'C:\Program Files\Overdraw\Overdraw.App.exe' --pointer-ink-spike --monitor 1 --verbose
 ```
 
-Run these from an elevated PowerShell session. `uiAccess=true` launch checks require the executable to be signed by a trusted certificate chain and installed in a secure location such as `C:\Program Files\Overdraw`.
-If the launch fails with `A referral was returned from the server`, confirm the preflight check reports `Trusted in LocalMachine Root: True`; current-user root trust is not the intended test path.
-
-After the certificate has been created once, normal development iterations usually only need:
+After the certificate has been created once, normal UIAccess development iterations usually only need:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\Publish-UiAccessTestBuild.ps1
@@ -94,15 +170,54 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Test-UiAccessBuild.ps1
 & 'C:\Program Files\Overdraw\Overdraw.App.exe' --pointer-ink-spike --monitor 1 --verbose
 ```
 
-For a one-command local install that creates the certificate if needed, publishes, signs, installs, runs preflight checks, and creates shortcuts:
+`uiAccess=true` launch checks require the executable to be signed by a trusted certificate chain and installed in a secure location such as `C:\Program Files\Overdraw`. If launch fails with `A referral was returned from the server`, confirm the preflight check reports `Trusted in LocalMachine Root: True`; current-user root trust is not the intended test path.
+
+The publish script cleans the installed test directory before copying the new build, which avoids stale files from older publish shapes.
+
+### 5. Test The Installed Build
+
+Run the installed pointer-target ink path:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Install-Overdraw.ps1 -Monitor 1
+& 'C:\Program Files\Overdraw\Overdraw.App.exe' --pointer-ink-spike --monitor 1 --verbose
 ```
 
-Use `-Monitor 1` for the current XP-Pen setup, or another selector accepted by `--monitor`. Add `-VerboseLaunch` if you want the generated shortcuts to include `--verbose`.
+Expected startup output includes:
 
-The publish script cleans the installed test directory before copying the new build, which avoids stale files from older publish shapes. To remove the installed test build later:
+```text
+Pointer-target pen ink active
+```
+
+Core manual checks:
+
+- Draw with the XP-Pen pen and confirm red strokes appear.
+- Confirm mouse clicks, right-clicks, scrolling, and typing still reach the underlying app.
+- Confirm the overlay does not steal focus.
+- Press `Ctrl+Shift+K`, hold `Ctrl+Shift+S`, and confirm the overlay shows `Ctrl+Shift+S`.
+- Type normal words into an underlying app and confirm Overdraw does not keep a typed history.
+- Press `Ctrl+Shift+F12` to close Overdraw.
+
+See `docs/TESTING.md` for the full regression checklist.
+
+### 6. Controls
+
+Current ink controls while an ink overlay is running:
+
+- `Ctrl+Shift+Z`: undo the last stroke.
+- `Ctrl+Shift+Y`: redo the last undone stroke.
+- `Ctrl+Shift+Backspace`: clear all ink.
+- `Ctrl+Shift+C`: cycle the colour for future strokes.
+- `Ctrl+Shift+Up`: increase opacity for future strokes.
+- `Ctrl+Shift+Down`: decrease opacity for future strokes.
+- `Ctrl+Shift+K`: toggle the shortcut-style key display.
+- `Ctrl+Shift+F12`: close Overdraw.
+
+Colour and opacity changes apply only to new strokes. Existing strokes keep the colour and opacity they had when drawn. Hardware eraser support is planned after the stroke-history model is validated.
+The key display starts disabled, shows only the currently held shortcut combination while enabled, and does not keep a typed history.
+
+### 7. Uninstall Test Builds
+
+To remove the installed test build:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\Remove-UiAccessTestBuild.ps1
@@ -115,38 +230,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Remove-UiAccessTestBuild.ps1 
 ```
 
 The signed UIAccess build path has been validated far enough to launch from `C:\Program Files\Overdraw`, preserve normal mouse/keyboard interaction, receive XP-Pen pointer input, and draw without moving the normal pointer to the pen location. A scoped cursor suppression experiment is in place for the remaining issue where Windows can show a busy/spinning cursor near the pen while drawing.
-
-Current ink controls while an ink overlay is running:
-
-- `Ctrl+Shift+Z`: undo the last stroke.
-- `Ctrl+Shift+Y`: redo the last undone stroke.
-- `Ctrl+Shift+Backspace`: clear all ink.
-- `Ctrl+Shift+C`: cycle the colour for future strokes.
-- `Ctrl+Shift+Up`: increase opacity for future strokes.
-- `Ctrl+Shift+Down`: decrease opacity for future strokes.
-- `Ctrl+Shift+F12`: close Overdraw.
-
-Colour and opacity changes apply only to new strokes. Existing strokes keep the colour and opacity they had when drawn. Hardware eraser support is planned after the stroke-history model is validated.
-
-Build the project with:
-
-```powershell
-dotnet build Overdraw.sln
-```
-
-For multi-monitor setups, list the detected displays first:
-
-```powershell
-dotnet run --project src/Overdraw.App -- --list-monitors
-```
-
-Then target a specific display for the overlay spike:
-
-```powershell
-dotnet run --project src/Overdraw.App -- --overlay-spike --monitor 1
-```
-
-`--monitor` accepts `primary`, a zero-based index from `--list-monitors`, or a device name such as `\\.\DISPLAY2`.
 
 ## Status
 This repository now contains a .NET 8 Windows prototype scaffold plus project documentation. Monitor selection, click-through overlay behavior, XP-Pen pointer detection, signed UIAccess launch, and native pointer-target ink drawing have been validated on the target setup.
