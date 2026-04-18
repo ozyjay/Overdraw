@@ -38,12 +38,33 @@ function New-Shortcut([string] $Path, [string] $TargetPath, [string] $Arguments,
     $shortcut.Save()
 }
 
+function Get-CodeSigningCertificateByThumbprint([string] $Thumbprint) {
+    if ([string]::IsNullOrWhiteSpace($Thumbprint)) {
+        return $null
+    }
+
+    return Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
+        Where-Object { $_.Thumbprint -eq $Thumbprint } |
+        Select-Object -First 1
+}
+
 if (-not (Test-IsAdministrator)) {
     throw "Install-Overdraw.ps1 must be run from an elevated PowerShell session."
 }
 
-if (-not (Test-Path $fullThumbprintPath)) {
-    Write-Host "No repo certificate thumbprint found. Creating and trusting a local UIAccess test certificate."
+$existingThumbprint = $null
+if (Test-Path $fullThumbprintPath) {
+    $existingThumbprint = (Get-Content $fullThumbprintPath -Raw).Trim()
+}
+
+if (-not $existingThumbprint -or -not (Get-CodeSigningCertificateByThumbprint $existingThumbprint)) {
+    if ($existingThumbprint) {
+        Write-Host "Repo certificate thumbprint is stale or missing from Cert:\CurrentUser\My. Creating a new UIAccess test certificate."
+    }
+    else {
+        Write-Host "No repo certificate thumbprint found. Creating and trusting a local UIAccess test certificate."
+    }
+
     & (Join-Path $PSScriptRoot "New-OverdrawTestCertificate.ps1") `
         -Subject $CertificateSubject `
         -ThumbprintPath $ThumbprintPath `
