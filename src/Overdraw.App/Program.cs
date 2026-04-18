@@ -636,8 +636,10 @@ internal sealed class PenInkOverlayWindow
     private const int CycleColorHotKeyId = 0x0BD7;
     private const int IncreaseOpacityHotKeyId = 0x0BD8;
     private const int DecreaseOpacityHotKeyId = 0x0BD9;
+    private const int ToggleKeyDisplayHotKeyId = 0x0BDA;
     private const int GwlExStyle = -20;
     private const int WhMouseLl = 14;
+    private const int WhKeyboardLl = 13;
     private const uint ModControl = 0x0002;
     private const uint ModShift = 0x0004;
     private const uint ModNoRepeat = 0x4000;
@@ -645,6 +647,7 @@ internal sealed class PenInkOverlayWindow
     private const uint VkUp = 0x26;
     private const uint VkDown = 0x28;
     private const uint VkC = 0x43;
+    private const uint VkK = 0x4B;
     private const uint VkY = 0x59;
     private const uint VkZ = 0x5A;
     private const uint VkF12 = 0x7B;
@@ -661,6 +664,12 @@ internal sealed class PenInkOverlayWindow
     private const int WmHotKey = 0x0312;
     private const int WmSetCursor = 0x0020;
     private const int WmAppProcessInk = 0x8001;
+    private const int KeyDisplayHorizontalMargin = 32;
+    private const int KeyDisplayHorizontalPadding = 112;
+    private const int KeyDisplayHeight = 96;
+    private const float KeyDisplayMaxFontSize = 24f;
+    private const float KeyDisplayMinFontSize = 14f;
+    private const int KeyDisplayLingerMilliseconds = 900;
     private static readonly IntPtr HwndTopmost = new(-1);
     private const uint TransparentColorKey = 0x000100;
 
@@ -669,10 +678,14 @@ internal sealed class PenInkOverlayWindow
     private readonly InkCaptureMode _captureMode;
     private readonly NativeMethods.WndProc _wndProcDelegate;
     private readonly NativeMethods.LowLevelMouseProc _mouseHookProc;
+    private readonly NativeMethods.LowLevelKeyboardProc _keyboardHookProc;
     private readonly Queue<PenInputEvent> _pendingInkEvents = new();
+    private readonly KeyDisplayState _keyDisplayState = new();
+    private readonly System.Windows.Forms.Timer _keyDisplayTimer = new();
     private InkRenderer? _inkRenderer;
     private IntPtr _hwnd;
     private IntPtr _mouseHook;
+    private IntPtr _keyboardHook;
     private bool _penIsDown;
     private bool _inkProcessQueued;
     private bool _cursorHiddenForPen;
@@ -685,6 +698,9 @@ internal sealed class PenInkOverlayWindow
         _captureMode = captureMode;
         _wndProcDelegate = WindowProc;
         _mouseHookProc = MouseHookProc;
+        _keyboardHookProc = KeyboardHookProc;
+        _keyDisplayTimer.Interval = KeyDisplayLingerMilliseconds;
+        _keyDisplayTimer.Tick += HandleKeyDisplayTimerTick;
     }
 
     public int Run()
@@ -698,6 +714,7 @@ internal sealed class PenInkOverlayWindow
             LogPlacement("created");
         }
         RegisterHotKeys();
+        InstallKeyboardHook(hInstance);
         if (_captureMode == InkCaptureMode.PointerTarget)
         {
             RegisterPointerInputTarget();
@@ -797,6 +814,7 @@ internal sealed class PenInkOverlayWindow
         RegisterHotKey(CycleColorHotKeyId, VkC, "Ctrl+Shift+C");
         RegisterHotKey(IncreaseOpacityHotKeyId, VkUp, "Ctrl+Shift+Up");
         RegisterHotKey(DecreaseOpacityHotKeyId, VkDown, "Ctrl+Shift+Down");
+        RegisterHotKey(ToggleKeyDisplayHotKeyId, VkK, "Ctrl+Shift+K");
     }
 
     private void RegisterHotKey(int id, uint virtualKey, string description)
@@ -813,6 +831,15 @@ internal sealed class PenInkOverlayWindow
         if (_mouseHook == IntPtr.Zero)
         {
             throw new InvalidOperationException($"SetWindowsHookEx failed with {Marshal.GetLastWin32Error()}.");
+        }
+    }
+
+    private void InstallKeyboardHook(IntPtr hInstance)
+    {
+        _keyboardHook = NativeMethods.SetWindowsKeyboardHookEx(WhKeyboardLl, _keyboardHookProc, hInstance, 0);
+        if (_keyboardHook == IntPtr.Zero)
+        {
+            throw new InvalidOperationException($"SetWindowsHookEx keyboard hook failed with {Marshal.GetLastWin32Error()}.");
         }
     }
 
@@ -853,6 +880,9 @@ internal sealed class PenInkOverlayWindow
             case WmHotKey when wParam == new IntPtr(ExitHotKeyId):
                 NativeMethods.DestroyWindow(hwnd);
                 return IntPtr.Zero;
+            case WmHotKey when wParam == new IntPtr(ToggleKeyDisplayHotKeyId):
+                ToggleKeyDisplay();
+                return IntPtr.Zero;
             case WmHotKey:
                 HandleDrawingHotKey(wParam);
                 return IntPtr.Zero;
@@ -880,8 +910,14 @@ internal sealed class PenInkOverlayWindow
                     NativeMethods.UnhookWindowsHookEx(_mouseHook);
                     _mouseHook = IntPtr.Zero;
                 }
+                if (_keyboardHook != IntPtr.Zero)
+                {
+                    NativeMethods.UnhookWindowsHookEx(_keyboardHook);
+                    _keyboardHook = IntPtr.Zero;
+                }
                 _inkRenderer?.Dispose();
                 _inkRenderer = null;
+                _keyDisplayTimer.Dispose();
                 UnregisterHotKeys(hwnd);
                 NativeMethods.PostQuitMessage(0);
                 return IntPtr.Zero;
@@ -908,6 +944,8 @@ internal sealed class PenInkOverlayWindow
             using var statusBrush = new SolidBrush(Color.FromArgb(196, 22, 22, 22));
             using var statusBorderPen = new Pen(Color.FromArgb(180, 220, 220, 220), 1f);
             using var statusFont = new Font("Segoe UI", 10f, FontStyle.Regular, GraphicsUnit.Point);
+            using var keyBrush = new SolidBrush(Color.FromArgb(210, 18, 18, 18));
+            using var keyBorderPen = new Pen(Color.FromArgb(210, 245, 245, 245), 1f);
 
             var clientBounds = Rectangle.FromLTRB(clientRect.Left, clientRect.Top, clientRect.Right, clientRect.Bottom);
             graphics.FillRectangle(transparentBrush, clientBounds);
@@ -926,6 +964,22 @@ internal sealed class PenInkOverlayWindow
                     Rectangle.Inflate(statusRect, -8, -2),
                     Color.FromArgb(240, 240, 240),
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            }
+
+            var keyDisplayText = _keyDisplayState.DisplayText;
+            if (!string.IsNullOrWhiteSpace(keyDisplayText))
+            {
+                using var keyFont = CreateKeyDisplayFont(graphics, keyDisplayText);
+                var keyRect = GetKeyDisplayRectangle(graphics, keyFont, keyDisplayText);
+                var textRect = RectangleF.Inflate(keyRect, -(KeyDisplayHorizontalPadding / 2f), -16f);
+                graphics.FillRectangle(keyBrush, keyRect);
+                graphics.DrawRectangle(keyBorderPen, keyRect);
+                using var keyTextBrush = new SolidBrush(Color.FromArgb(250, 250, 250));
+                using var keyStringFormat = CreateKeyDisplayStringFormat();
+                var originalTextHint = graphics.TextRenderingHint;
+                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                graphics.DrawString(keyDisplayText, keyFont, keyTextBrush, textRect, keyStringFormat);
+                graphics.TextRenderingHint = originalTextHint;
             }
         }
         finally
@@ -959,6 +1013,19 @@ internal sealed class PenInkOverlayWindow
         }
     }
 
+    private void ToggleKeyDisplay()
+    {
+        var oldRectangle = GetKeyDisplayRectangle();
+        _keyDisplayState.Toggle();
+        _keyDisplayTimer.Stop();
+        if (_verbose)
+        {
+            Console.WriteLine($"key display | {(_keyDisplayState.IsEnabled ? "enabled" : "disabled")}");
+        }
+
+        InvalidateRectangle(CombineDirty(oldRectangle, GetKeyDisplayRectangle()) ?? oldRectangle);
+    }
+
     private static void UnregisterHotKeys(IntPtr hwnd)
     {
         NativeMethods.UnregisterHotKey(hwnd, ExitHotKeyId);
@@ -968,6 +1035,40 @@ internal sealed class PenInkOverlayWindow
         NativeMethods.UnregisterHotKey(hwnd, CycleColorHotKeyId);
         NativeMethods.UnregisterHotKey(hwnd, IncreaseOpacityHotKeyId);
         NativeMethods.UnregisterHotKey(hwnd, DecreaseOpacityHotKeyId);
+        NativeMethods.UnregisterHotKey(hwnd, ToggleKeyDisplayHotKeyId);
+    }
+
+    private IntPtr KeyboardHookProc(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0)
+        {
+            var hookStruct = Marshal.PtrToStructure<NativeMethods.KbdLlHookStruct>(lParam);
+            var message = unchecked((uint)wParam.ToInt64());
+            var changed = message switch
+            {
+                NativeMethods.WmKeyDown or NativeMethods.WmSysKeyDown => _keyDisplayState.HandleKeyDown(hookStruct.vkCode),
+                NativeMethods.WmKeyUp or NativeMethods.WmSysKeyUp => _keyDisplayState.HandleKeyUp(hookStruct.vkCode),
+                _ => false
+            };
+
+            if (changed)
+            {
+                InvalidateRectangle(GetKeyDisplayRectangle());
+                if (_keyDisplayState.IsLingering)
+                {
+                    _keyDisplayTimer.Stop();
+                    _keyDisplayTimer.Start();
+                }
+            }
+        }
+
+        return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
+    }
+
+    private void HandleKeyDisplayTimerTick(object? sender, EventArgs e)
+    {
+        _keyDisplayTimer.Stop();
+        InvalidateRectangle(GetKeyDisplayRectangle());
     }
 
     private IntPtr MouseHookProc(int nCode, IntPtr wParam, IntPtr lParam)
@@ -1188,6 +1289,62 @@ internal sealed class PenInkOverlayWindow
         return new Rectangle(24, Math.Max(0, _monitor.Bounds.Height - 48), Math.Max(0, _monitor.Bounds.Width - 48), 28);
     }
 
+    private Rectangle GetKeyDisplayRectangle()
+    {
+        return new Rectangle(
+            KeyDisplayHorizontalMargin,
+            Math.Max(24, _monitor.Bounds.Height - 196),
+            Math.Max(0, _monitor.Bounds.Width - (KeyDisplayHorizontalMargin * 2)),
+            KeyDisplayHeight);
+    }
+
+    private Rectangle GetKeyDisplayRectangle(Graphics graphics, Font font, string text)
+    {
+        var size = MeasureKeyDisplayText(graphics, font, text);
+        var maxWidth = Math.Max(220, _monitor.Bounds.Width - (KeyDisplayHorizontalMargin * 2));
+        var width = Math.Clamp((int)Math.Ceiling(size.Width) + KeyDisplayHorizontalPadding, 220, maxWidth);
+        return new Rectangle(
+            Math.Max(KeyDisplayHorizontalMargin, (_monitor.Bounds.Width - width) / 2),
+            Math.Max(24, _monitor.Bounds.Height - 196),
+            width,
+            KeyDisplayHeight);
+    }
+
+    private Font CreateKeyDisplayFont(Graphics graphics, string text)
+    {
+        var maxTextWidth = Math.Max(1, _monitor.Bounds.Width - (KeyDisplayHorizontalMargin * 2) - KeyDisplayHorizontalPadding);
+        for (var size = KeyDisplayMaxFontSize; size > KeyDisplayMinFontSize; size -= 1f)
+        {
+            var candidate = new Font("Segoe UI", size, FontStyle.Bold, GraphicsUnit.Point);
+            var measured = MeasureKeyDisplayText(graphics, candidate, text);
+            if (measured.Width <= maxTextWidth)
+            {
+                return candidate;
+            }
+
+            candidate.Dispose();
+        }
+
+        return new Font("Segoe UI", KeyDisplayMinFontSize, FontStyle.Bold, GraphicsUnit.Point);
+    }
+
+    private static SizeF MeasureKeyDisplayText(Graphics graphics, Font font, string text)
+    {
+        using var stringFormat = CreateKeyDisplayStringFormat();
+        return graphics.MeasureString(text, font, int.MaxValue, stringFormat);
+    }
+
+    private static StringFormat CreateKeyDisplayStringFormat()
+    {
+        return new StringFormat(StringFormat.GenericTypographic)
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            FormatFlags = StringFormatFlags.NoWrap,
+            Trimming = StringTrimming.EllipsisCharacter
+        };
+    }
+
     private static Rectangle? CombineDirty(Rectangle? first, Rectangle? second)
     {
         if (first is null || first == Rectangle.Empty)
@@ -1235,6 +1392,10 @@ internal static partial class NativeMethods
     public const uint WmMouseMove = 0x0200;
     public const uint WmLButtonDown = 0x0201;
     public const uint WmLButtonUp = 0x0202;
+    public const uint WmKeyDown = 0x0100;
+    public const uint WmKeyUp = 0x0101;
+    public const uint WmSysKeyDown = 0x0104;
+    public const uint WmSysKeyUp = 0x0105;
     public static readonly IntPtr IdcArrow = new(32512);
     public static readonly IntPtr DpiAwarenessContextPerMonitorAwareV2 = new(-4);
 
@@ -1314,6 +1475,16 @@ internal static partial class NativeMethods
         public IntPtr dwExtraInfo;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KbdLlHookStruct
+    {
+        public uint vkCode;
+        public uint scanCode;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct WndClassEx
     {
@@ -1333,6 +1504,7 @@ internal static partial class NativeMethods
 
     public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+    public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
     private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdc, IntPtr lprcMonitor, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -1356,6 +1528,9 @@ internal static partial class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hmod, uint dwThreadId);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+    public static extern IntPtr SetWindowsKeyboardHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hmod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool UnhookWindowsHookEx(IntPtr hhk);

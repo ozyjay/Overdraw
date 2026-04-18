@@ -34,12 +34,17 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 - Press `Ctrl+Shift+Backspace` and confirm all ink clears without closing Overdraw.
 - Press `Ctrl+Shift+C`, draw a new stroke, and confirm only the new stroke changes colour.
 - Press `Ctrl+Shift+Down` or `Ctrl+Shift+Up`, draw a new stroke, and confirm only the new stroke changes opacity.
+- Press `Ctrl+Shift+K` and confirm the key display toggles on without focusing Overdraw.
+- Hold `Ctrl+Shift+S` and confirm the overlay shows `Ctrl+Shift+S` while the keys are held.
+- Type normal words into an underlying app and confirm the text reaches that app and Overdraw does not show a typed history.
+- Press `Ctrl+Shift+K` again and confirm the key display disappears.
 - Keep `--ink-spike` runnable only as a fallback comparison, and note that its system-cursor-following behavior is expected.
 
 ## Failure Cases To Watch
 - Overlay becomes the focused window unexpectedly.
 - Mouse clicks stop reaching the underlying app.
 - Keyboard input is swallowed or redirected.
+- Key display records text history or remains visible after being toggled off.
 - Pen hover or proximity causes unstable mode switching.
 - Rendering lags badly during longer strokes.
 - Multi-monitor or DPI behavior causes offset or clipped drawing.
