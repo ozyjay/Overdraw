@@ -680,6 +680,8 @@ internal sealed class PenInkOverlayWindow
     private readonly NativeMethods.LowLevelMouseProc _mouseHookProc;
     private readonly NativeMethods.LowLevelKeyboardProc _keyboardHookProc;
     private readonly Queue<PenInputEvent> _pendingInkEvents = new();
+    private readonly Queue<string> _pendingInputDiagnostics = new();
+    private int _inputDiagnosticCount;
     private readonly KeyDisplayState _keyDisplayState = new();
     private readonly System.Windows.Forms.Timer _keyDisplayTimer = new();
     private InkRenderer? _inkRenderer;
@@ -832,6 +834,7 @@ internal sealed class PenInkOverlayWindow
         {
             throw new InvalidOperationException($"SetWindowsHookEx failed with {Marshal.GetLastWin32Error()}.");
         }
+        Console.WriteLine("Pen mouse hook active. Only Windows pen-tagged input draws; ordinary mouse input passes through.");
     }
 
     private void InstallKeyboardHook(IntPtr hInstance)
@@ -1079,18 +1082,30 @@ internal sealed class PenInkOverlayWindow
         }
 
         var hookStruct = Marshal.PtrToStructure<NativeMethods.MsLlHookStruct>(lParam);
-        if (!NativeMethods.IsPenMouseMessage(hookStruct.dwExtraInfo))
+        var message = unchecked((uint)wParam.ToInt64());
+        var isPen = NativeMethods.IsPenMouseMessage(hookStruct.dwExtraInfo);
+        var insideMonitor = _monitor.Bounds.Contains(hookStruct.pt);
+        if (_verbose && message == NativeMethods.WmLButtonDown && _inputDiagnosticCount < 16)
+        {
+            _inputDiagnosticCount++;
+            _pendingInputDiagnostics.Enqueue(
+                $"input-down | pen-tagged={isPen} inside-monitor={insideMonitor} " +
+                $"screen=({hookStruct.pt.X},{hookStruct.pt.Y}) extra=0x{hookStruct.dwExtraInfo.ToInt64():X} " +
+                $"flags=0x{hookStruct.flags:X}");
+            // Keep console/file I/O out of the time-sensitive low-level hook.
+            QueueInkProcessing();
+        }
+        if (!isPen)
         {
             return NativeMethods.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
         }
 
-        if (!_monitor.Bounds.Contains(hookStruct.pt))
+        if (!insideMonitor)
         {
             return NativeMethods.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
         }
 
         var localPoint = new Point(hookStruct.pt.X - _monitor.Bounds.Left, hookStruct.pt.Y - _monitor.Bounds.Top);
-        var message = unchecked((uint)wParam.ToInt64());
         switch (message)
         {
             case NativeMethods.WmMouseMove:
@@ -1166,6 +1181,11 @@ internal sealed class PenInkOverlayWindow
     private void EnqueuePenEvent(PenInputEvent input)
     {
         _pendingInkEvents.Enqueue(input);
+        QueueInkProcessing();
+    }
+
+    private void QueueInkProcessing()
+    {
         if (_inkProcessQueued || _hwnd == IntPtr.Zero)
         {
             return;
@@ -1177,6 +1197,10 @@ internal sealed class PenInkOverlayWindow
 
     private void ProcessPendingInk()
     {
+        while (_pendingInputDiagnostics.TryDequeue(out var diagnostic))
+        {
+            Console.WriteLine(diagnostic);
+        }
         Rectangle? dirtyRectangle = null;
         while (_pendingInkEvents.Count > 0)
         {

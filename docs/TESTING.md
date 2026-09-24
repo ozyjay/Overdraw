@@ -49,6 +49,15 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 - Rendering lags badly during longer strokes.
 - Multi-monitor or DPI behavior causes offset or clipped drawing.
 
+## Diagnosing Missing Pen Ink
+- Run the dev fallback with `--ink-spike --monitor <index> --verbose` and tap with the pen.
+- Startup must report `Pen mouse hook active`. The first 16 left-button-down events include `pen-tagged`, `inside-monitor`, screen coordinates, and the Windows extra-info signature.
+- `pen-tagged=False` means the event lacks the Windows pen signature; ordinary mouse clicks also produce this result. Correlate these records with deliberate pen taps before diagnosing the driver.
+- `pen-tagged=True inside-monitor=False` means recognizable pen input arrived outside the selected display. Check the XPPen work-area mapping and Overdraw monitor selection.
+- `pen-tagged=True inside-monitor=True` should be followed by `pen-down` and visible ink. If it is, also verify normal mouse input still passes through without drawing.
+- Diagnostic output is bounded and deferred out of the low-level hook. Restart the dev overlay to capture another sample after 16 clicks.
+- A dev `--pointer-ink-spike` run reporting registration error 5 cannot validate the signed UIAccess input path; test that path separately using the installed signed build.
+
 ## Automation Guidance
 - Automate only the logic that is stable and hardware-independent first.
 - Keep Windows API behavior behind interfaces so non-UI logic can be tested without the live overlay.
