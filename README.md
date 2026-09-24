@@ -199,6 +199,8 @@ Core manual checks:
 
 See `docs/TESTING.md` for the full regression checklist.
 
+If the overlay is visible but no ink appears and the pen moves the cursor on another screen, check **XPPen > Device > Work area > Screen**. Map the tablet to the same physical display selected by Overdraw's `--monitor` option. XPPen's monitor labels are not Overdraw's zero-based indexes. This mapping mismatch caused a confirmed no-ink issue on the Artist Pro 16TP; see the [resolved incident and troubleshooting notes](docs/TESTING.md#resolved-incident-xp-pen-mapped-to-the-other-screen-2026-09-24).
+
 ### 6. Controls
 
 Current ink controls while an ink overlay is running:

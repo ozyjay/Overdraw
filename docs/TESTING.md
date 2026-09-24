@@ -22,6 +22,7 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 - Clear or exit the overlay session and confirm the desktop returns to normal behavior.
 
 ## Current XP-Pen Regression Checklist
+- Confirm XPPen Work area > Screen maps the pen to the same physical display selected by Overdraw. Driver monitor labels and Overdraw's zero-based indexes differ; check coordinates rather than assuming the numbers match.
 - Publish/sign/install the UIAccess build with `scripts\Publish-UiAccessTestBuild.ps1`.
 - Run `scripts\Test-UiAccessBuild.ps1` and confirm signature, secure-location, thumbprint, and LocalMachine-root checks pass.
 - Run `C:\Program Files\Overdraw\Overdraw.App.exe --pointer-ink-spike --monitor 1 --verbose`.
@@ -50,6 +51,7 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 - Multi-monitor or DPI behavior causes offset or clipped drawing.
 
 ## Diagnosing Missing Pen Ink
+- First check XPPen Work area > Screen: the pen cursor must move on the intended drawing display. A visible overlay does not prove the tablet is mapped to it.
 - Run the dev fallback with `--ink-spike --monitor <index> --verbose` and tap with the pen.
 - Startup must report `Pen mouse hook active`. The first 16 left-button-down events include `pen-tagged`, `inside-monitor`, screen coordinates, and the Windows extra-info signature.
 - `pen-tagged=False` means the event lacks the Windows pen signature; ordinary mouse clicks also produce this result. Correlate these records with deliberate pen taps before diagnosing the driver.
@@ -57,6 +59,20 @@ Validate that Overdraw preserves the core interaction contract on Windows while 
 - `pen-tagged=True inside-monitor=True` should be followed by `pen-down` and visible ink. If it is, also verify normal mouse input still passes through without drawing.
 - Diagnostic output is bounded and deferred out of the low-level hook. Restart the dev overlay to capture another sample after 16 clicks.
 - A dev `--pointer-ink-spike` run reporting registration error 5 cannot validate the signed UIAccess input path; test that path separately using the installed signed build.
+
+### Resolved incident: XP-PEN mapped to the other screen (2026-09-24)
+
+Hardware: Artist Pro 16TP 4K, XPPen driver 4.0.14, two vertically arranged 3840x2160 displays.
+
+Symptoms: Overdraw's dev status strip was visible on the lower XP-PEN screen, but no ink appeared. Moving the pen moved the mouse pointer on the other screen. The installed build passed signature and UIAccess preflight checks.
+
+Confirmed configuration mismatch: the live XPPen driver had Work area > Screen set to `Monitor1(0,0,3840,2160)Primary`, while Overdraw targeted the lower display at `(0,2160)`. Windows Ink was already enabled and Mouse mode was disabled.
+
+Fix: in XPPen > Device > Work area > Screen, select `Monitor2(0,2160,3840,2160)`. This corresponds to Overdraw's `--monitor 1` on this setup. For other setups, identify the physical display and verify its coordinates rather than copying these numbers.
+
+Validation: after changing the driver mapping, the user confirmed the cursor stayed on the XP-PEN and red strokes appeared in the dev `--ink-spike --monitor 1` fallback. The installed pointer-target mode was not retested after the fix.
+
+Diagnostic caveats: the earlier hook logs contained no pen-tagged clicks, but individual pen taps could not all be identified in those records; this did not establish a separate driver recognition fault. The unsigned dev pointer-target mode also failed registration with Win32 error 5, a separate UIAccess limitation. Neither observation justified changing the pen-only input filter or enabling ordinary mouse drawing.
 
 ## Automation Guidance
 - Automate only the logic that is stable and hardware-independent first.
